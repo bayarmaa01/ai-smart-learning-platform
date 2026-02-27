@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Clock, ChevronRight, Award } from 'lucide-react';
+import api from '../../services/api';
 
 const questions = [
   {
@@ -60,12 +61,22 @@ export default function PlacementTestPage() {
     setAnswers({ ...answers, [questionId]: optionIndex });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const score = questions.reduce((acc, q) => acc + (answers[q.id] === q.correct ? 1 : 0), 0);
     const pct = (score / questions.length) * 100;
     const level = pct >= 80 ? 'advanced' : pct >= 50 ? 'intermediate' : 'beginner';
-    setResult({ score, total: questions.length, pct, level });
+    const resultData = { score, total: questions.length, pct, level };
+    setResult(resultData);
     setPhase('result');
+
+    // Save placement result to backend (non-blocking)
+    api.post('/users/placement-result', {
+      level,
+      score,
+      total: questions.length,
+      percentage: pct,
+      answers: Object.entries(answers).map(([qId, optIdx]) => ({ questionId: qId, selectedOption: optIdx })),
+    }).catch(() => null);
   };
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;

@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { fetchMyCourses } from '../../store/slices/courseSlice';
+import api from '../../services/api';
 import {
   BookOpen, Clock, Award, TrendingUp, Play, ChevronRight,
   Flame, Star, Target, Zap
@@ -11,12 +12,6 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 
-const weeklyData = [
-  { day: 'Mon', hours: 1.5 }, { day: 'Tue', hours: 2.0 }, { day: 'Wed', hours: 0.5 },
-  { day: 'Thu', hours: 3.0 }, { day: 'Fri', hours: 2.5 }, { day: 'Sat', hours: 1.0 },
-  { day: 'Sun', hours: 2.0 },
-];
-
 function StatCard({ icon: Icon, label, value, color, trend }) {
   return (
     <div className="card hover:border-slate-600 transition-colors">
@@ -24,7 +19,7 @@ function StatCard({ icon: Icon, label, value, color, trend }) {
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
           <Icon className="w-5 h-5 text-white" />
         </div>
-        {trend && (
+        {trend != null && (
           <span className="badge-green text-xs">+{trend}%</span>
         )}
       </div>
@@ -35,6 +30,7 @@ function StatCard({ icon: Icon, label, value, color, trend }) {
 }
 
 function CourseProgressCard({ course }) {
+  const progress = course.progress_percentage ?? course.progress ?? 0;
   return (
     <div className="flex items-center gap-4 p-4 bg-slate-800/30 rounded-xl hover:bg-slate-800/50 transition-colors group">
       <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary-500/20 to-accent-500/20 border border-primary-500/20 flex items-center justify-center flex-shrink-0">
@@ -42,15 +38,15 @@ function CourseProgressCard({ course }) {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-white truncate">{course.title}</p>
-        <p className="text-xs text-slate-400 mt-0.5">{course.instructor}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{course.instructor_name || course.instructor}</p>
         <div className="mt-2 flex items-center gap-2">
           <div className="flex-1 bg-slate-700 rounded-full h-1.5">
             <div
               className="bg-gradient-to-r from-primary-500 to-accent-500 h-1.5 rounded-full transition-all duration-500"
-              style={{ width: `${course.progress}%` }}
+              style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
             />
           </div>
-          <span className="text-xs text-slate-400 flex-shrink-0">{course.progress}%</span>
+          <span className="text-xs text-slate-400 flex-shrink-0">{Math.round(progress)}%</span>
         </div>
       </div>
       <Link
@@ -67,25 +63,47 @@ export default function StudentDashboard() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const { user } = useSelector((state) => state.auth);
-  const { myCourses, isLoading } = useSelector((state) => state.courses);
+  const { myCourses } = useSelector((state) => state.courses);
+  const [stats, setStats] = useState(null);
+  const [weeklyData, setWeeklyData] = useState([
+    { day: 'Mon', hours: 0 }, { day: 'Tue', hours: 0 }, { day: 'Wed', hours: 0 },
+    { day: 'Thu', hours: 0 }, { day: 'Fri', hours: 0 }, { day: 'Sat', hours: 0 },
+    { day: 'Sun', hours: 0 },
+  ]);
 
   useEffect(() => {
     dispatch(fetchMyCourses());
+    api.get('/users/stats').then((res) => {
+      setStats(res.data.stats);
+    }).catch(() => null);
+    api.get('/users/activity/weekly').then((res) => {
+      if (res.data.weekly?.length) setWeeklyData(res.data.weekly);
+    }).catch(() => null);
   }, [dispatch]);
 
-  const stats = [
-    { icon: BookOpen, label: t('dashboard.enrolledCourses'), value: myCourses.length || 8, color: 'bg-primary-600', trend: 12 },
-    { icon: Award, label: t('dashboard.certificates'), value: 3, color: 'bg-green-600', trend: 5 },
-    { icon: Clock, label: t('dashboard.totalHours'), value: '47h', color: 'bg-purple-600', trend: 8 },
-    { icon: TrendingUp, label: t('dashboard.completionRate'), value: '78%', color: 'bg-orange-600', trend: 3 },
+  const enrolledCount = stats?.enrolledCourses ?? myCourses.length;
+  const certificateCount = stats?.certificates ?? 0;
+  const totalHours = stats?.totalHours ?? 0;
+  const completionRate = stats?.completionRate ?? 0;
+  const streak = stats?.streak ?? 0;
+  const weeklyGoalHours = stats?.weeklyGoalHours ?? 10;
+  const weeklyCompletedHours = stats?.weeklyCompletedHours ?? 0;
+  const weeklyGoalPct = weeklyGoalHours > 0 ? Math.min(100, Math.round((weeklyCompletedHours / weeklyGoalHours) * 100)) : 0;
+  const points = stats?.points ?? 0;
+
+  const statCards = [
+    { icon: BookOpen, label: t('dashboard.enrolledCourses'), value: enrolledCount, color: 'bg-primary-600', trend: null },
+    { icon: Award, label: t('dashboard.certificates'), value: certificateCount, color: 'bg-green-600', trend: null },
+    { icon: Clock, label: t('dashboard.totalHours'), value: `${Math.round(totalHours)}h`, color: 'bg-purple-600', trend: null },
+    { icon: TrendingUp, label: t('dashboard.completionRate'), value: `${Math.round(completionRate)}%`, color: 'bg-orange-600', trend: null },
   ];
 
-  const mockCourses = [
-    { id: '1', title: 'Machine Learning Fundamentals', instructor: 'Dr. Sarah Chen', progress: 65 },
-    { id: '2', title: 'React Advanced Patterns', instructor: 'John Smith', progress: 42 },
-    { id: '3', title: 'Cloud Architecture on AWS', instructor: 'Mike Johnson', progress: 88 },
-    { id: '4', title: 'Python for Data Science', instructor: 'Emma Wilson', progress: 30 },
-  ];
+  const inProgressCourses = myCourses.filter((c) => {
+    const p = c.progress_percentage ?? c.progress ?? 0;
+    return p > 0 && p < 100;
+  }).slice(0, 4);
+
+  const displayCourses = inProgressCourses.length > 0 ? inProgressCourses : myCourses.slice(0, 4);
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -96,14 +114,16 @@ export default function StudentDashboard() {
           </h1>
           <p className="text-slate-400 mt-1">{t('dashboard.subtitle')}</p>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 border border-orange-500/20 rounded-xl">
-          <Flame className="w-5 h-5 text-orange-400" />
-          <span className="text-orange-300 font-semibold text-sm">7 {t('dashboard.streak')}</span>
-        </div>
+        {streak > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+            <Flame className="w-5 h-5 text-orange-400" />
+            <span className="text-orange-300 font-semibold text-sm">{streak} {t('dashboard.streak')}</span>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}
       </div>
@@ -141,21 +161,21 @@ export default function StudentDashboard() {
                 <circle cx="60" cy="60" r="50" fill="none" stroke="#334155" strokeWidth="10" />
                 <circle
                   cx="60" cy="60" r="50" fill="none" stroke="#3b82f6" strokeWidth="10"
-                  strokeDasharray={`${2 * Math.PI * 50 * 0.72} ${2 * Math.PI * 50}`}
+                  strokeDasharray={`${2 * Math.PI * 50 * (weeklyGoalPct / 100)} ${2 * Math.PI * 50}`}
                   strokeLinecap="round"
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-white">72%</span>
-                <span className="text-xs text-slate-400">of 10h</span>
+                <span className="text-2xl font-bold text-white">{weeklyGoalPct}%</span>
+                <span className="text-xs text-slate-400">of {weeklyGoalHours}h</span>
               </div>
             </div>
           </div>
           <div className="space-y-3">
             {[
-              { icon: Target, label: 'Goal', value: '10 hours/week', color: 'text-primary-400' },
-              { icon: Zap, label: 'Completed', value: '7.2 hours', color: 'text-green-400' },
-              { icon: Star, label: 'Points', value: '1,240 pts', color: 'text-yellow-400' },
+              { icon: Target, label: 'Goal', value: `${weeklyGoalHours} hours/week`, color: 'text-primary-400' },
+              { icon: Zap, label: 'Completed', value: `${weeklyCompletedHours.toFixed(1)} hours`, color: 'text-green-400' },
+              { icon: Star, label: 'Points', value: `${points.toLocaleString()} pts`, color: 'text-yellow-400' },
             ].map(({ icon: Icon, label, value, color }) => (
               <div key={label} className="flex items-center justify-between p-2 rounded-lg bg-slate-800/30">
                 <div className="flex items-center gap-2">
@@ -176,11 +196,19 @@ export default function StudentDashboard() {
             {t('dashboard.viewAll')} <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {mockCourses.map((course) => (
-            <CourseProgressCard key={course.id} course={course} />
-          ))}
-        </div>
+        {displayCourses.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {displayCourses.map((course) => (
+              <CourseProgressCard key={course.id} course={course} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+            <p className="text-slate-400 text-sm">No courses yet.</p>
+            <Link to="/courses" className="btn-primary text-sm mt-4 inline-block">Browse Courses</Link>
+          </div>
+        )}
       </div>
     </div>
   );

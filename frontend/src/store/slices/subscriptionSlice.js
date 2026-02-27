@@ -10,6 +10,18 @@ export const fetchPlans = createAsyncThunk('subscription/fetchPlans', async (_, 
   }
 });
 
+export const fetchCurrentSubscription = createAsyncThunk(
+  'subscription/fetchCurrent',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/subscriptions/current');
+      return response.data.subscription;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.message || 'Failed to fetch subscription');
+    }
+  }
+);
+
 export const subscribeToPlan = createAsyncThunk(
   'subscription/subscribe',
   async ({ planId, billingCycle }, { rejectWithValue }) => {
@@ -42,6 +54,12 @@ const subscriptionSlice = createSlice({
         state.isLoading = false;
         state.error = action.payload;
       })
+      .addCase(fetchCurrentSubscription.pending, (state) => { state.isLoading = true; })
+      .addCase(fetchCurrentSubscription.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.currentPlan = action.payload;
+      })
+      .addCase(fetchCurrentSubscription.rejected, (state) => { state.isLoading = false; })
       .addCase(subscribeToPlan.fulfilled, (state, action) => {
         state.currentPlan = action.payload.subscription;
       });

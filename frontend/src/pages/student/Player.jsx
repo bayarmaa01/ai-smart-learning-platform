@@ -1,58 +1,179 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useSelector } from 'react-redux';
+import api from '../../services/api';
 import {
   Play, ChevronLeft, ChevronRight, Check, BookOpen,
-  MessageSquare, FileText, Bot, ChevronDown, ChevronUp
+  MessageSquare, FileText, Bot, Loader2, AlertCircle
 } from 'lucide-react';
-
-const mockLessons = [
-  { id: '1', title: 'Welcome to the course', duration: '5:30', completed: true, section: 'Data Preprocessing' },
-  { id: '2', title: 'Getting the Dataset', duration: '8:15', completed: true, section: 'Data Preprocessing' },
-  { id: '3', title: 'Importing the Libraries', duration: '6:45', completed: false, section: 'Data Preprocessing' },
-  { id: '4', title: 'Handling Missing Data', duration: '12:20', completed: false, section: 'Data Preprocessing' },
-  { id: '5', title: 'Simple Linear Regression', duration: '15:00', completed: false, section: 'Regression' },
-];
+import toast from 'react-hot-toast';
 
 export default function PlayerPage() {
   const { t } = useTranslation();
   const { id } = useParams();
-  const [currentLesson, setCurrentLesson] = useState(mockLessons[2]);
+  const { user } = useSelector((state) => state.auth);
+
+  const [lessons, setLessons] = useState([]);
+  const [currentLesson, setCurrentLesson] = useState(null);
   const [activeTab, setActiveTab] = useState('curriculum');
   const [note, setNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [markingComplete, setMarkingComplete] = useState(false);
 
-  const currentIndex = mockLessons.findIndex((l) => l.id === currentLesson.id);
-  const progress = Math.round((mockLessons.filter((l) => l.completed).length / mockLessons.length) * 100);
+  const fetchLessons = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/courses/${id}`);
+      const course = res.data.course;
+      const allLessons = (course.sections || course.curriculum || []).flatMap((s) =>
+        (s.lessons || []).map((l) => ({ ...l, section: s.title }))
+      );
+      setLessons(allLessons);
+
+      const progressRes = await api.get(`/courses/${id}/progress`).catch(() => ({ data: { progress: [] } }));
+      const completedIds = new Set((progressRes.data.progress || []).filter((p) => p.completed_at).map((p) => p.lesson_id));
+
+      const enriched = allLessons.map((l) => ({ ...l, completed: completedIds.has(l.id) }));
+      setLessons(enriched);
+
+      const firstIncomplete = enriched.find((l) => !l.completed) || enriched[0];
+      setCurrentLesson(firstIncomplete || null);
+    } catch (err) {
+      setError('Failed to load course content');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchLessons();
+  }, [fetchLessons]);
+
+  const handleMarkComplete = async () => {
+    if (!currentLesson || markingComplete) return;
+    setMarkingComplete(true);
+    try {
+      await api.post(`/courses/${id}/progress`, {
+        lessonId: currentLesson.id,
+        completed: true,
+        watchedSeconds: currentLesson.duration_seconds || 0,
+      });
+      setLessons((prev) =>
+        prev.map((l) => l.id === currentLesson.id ? { ...l, completed: true } : l)
+      );
+      setCurrentLesson((prev) => ({ ...prev, completed: true }));
+      toast.success(t('player.markedComplete', { defaultValue: 'Lesson marked as complete!' }));
+
+      const currentIndex = lessons.findIndex((l) => l.id === currentLesson.id);
+      if (currentIndex < lessons.length - 1) {
+        setTimeout(() => setCurrentLesson(lessons[currentIndex + 1]), 500);
+      }
+    } catch {
+      toast.error('Failed to mark lesson complete');
+    } finally {
+      setMarkingComplete(false);
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!note.trim() || !currentLesson) return;
+    setSavingNote(true);
+    try {
+      await api.post(`/courses/${id}/notes`, {
+        lessonId: currentLesson.id,
+        content: note.trim(),
+      }).catch(() => null);
+      toast.success(t('player.noteSaved', { defaultValue: 'Note saved!' }));
+      setNote('');
+    } catch {
+      toast.error('Failed to save note');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <Loader2 className="w-10 h-10 text-primary-400 animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !currentLesson) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-64px)] text-center">
+        <AlertCircle className="w-12 h-12 text-red-400 mb-4" />
+        <p className="text-white text-lg mb-2">{error || 'No lessons found'}</p>
+        <Link to={`/courses/${id}`} className="btn-secondary mt-4">Back to Course</Link>
+      </div>
+    );
+  }
+
+  const currentIndex = lessons.findIndex((l) => l.id === currentLesson.id);
+  const completedCount = lessons.filter((l) => l.completed).length;
+  const progress = lessons.length > 0 ? Math.round((completedCount / lessons.length) * 100) : 0;
 
   return (
     <div className="animate-fade-in -m-4 lg:-m-6">
       <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
         <div className="flex-1 flex flex-col min-w-0">
           <div className="bg-black aspect-video lg:aspect-auto lg:flex-1 flex items-center justify-center relative">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4 cursor-pointer hover:bg-white/20 transition-colors">
-                <Play className="w-8 h-8 text-white ml-1" />
+            {currentLesson.video_url ? (
+              <video
+                key={currentLesson.id}
+                controls
+                className="w-full h-full"
+                src={currentLesson.video_url}
+                onEnded={handleMarkComplete}
+              >
+                Your browser does not support video playback.
+              </video>
+            ) : (
+              <div className="text-center">
+                <div className="w-20 h-20 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Play className="w-8 h-8 text-white ml-1" />
+                </div>
+                <p className="text-white/60 text-sm">{currentLesson.title}</p>
+                <p className="text-white/30 text-xs mt-2">No video URL configured for this lesson</p>
               </div>
-              <p className="text-white/60 text-sm">{currentLesson.title}</p>
-            </div>
+            )}
             <div className="absolute bottom-4 left-4 right-4">
               <div className="bg-white/10 rounded-full h-1">
-                <div className="bg-primary-500 h-1 rounded-full w-1/3" />
+                <div className="bg-primary-500 h-1 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
             </div>
           </div>
 
           <div className="p-4 bg-slate-900 border-t border-slate-700">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-white">{currentLesson.title}</h2>
-              <button className="flex items-center gap-2 text-sm text-green-400 hover:text-green-300 transition-colors">
-                <Check className="w-4 h-4" />
-                {t('player.markComplete')}
+              <div>
+                <h2 className="font-semibold text-white">{currentLesson.title}</h2>
+                {currentLesson.section && (
+                  <p className="text-xs text-slate-400 mt-0.5">{currentLesson.section}</p>
+                )}
+              </div>
+              <button
+                onClick={handleMarkComplete}
+                disabled={currentLesson.completed || markingComplete}
+                className={`flex items-center gap-2 text-sm transition-colors ${
+                  currentLesson.completed
+                    ? 'text-green-400 cursor-default'
+                    : 'text-slate-400 hover:text-green-400'
+                }`}
+              >
+                {markingComplete
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Check className="w-4 h-4" />}
+                {currentLesson.completed ? 'Completed' : t('player.markComplete')}
               </button>
             </div>
             <div className="flex items-center gap-4">
               <button
-                onClick={() => currentIndex > 0 && setCurrentLesson(mockLessons[currentIndex - 1])}
+                onClick={() => currentIndex > 0 && setCurrentLesson(lessons[currentIndex - 1])}
                 disabled={currentIndex === 0}
                 className="flex items-center gap-1 text-sm text-slate-400 hover:text-white disabled:opacity-40 transition-colors"
               >
@@ -62,9 +183,10 @@ export default function PlayerPage() {
               <div className="flex-1 bg-slate-700 rounded-full h-1.5">
                 <div className="bg-primary-500 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
+              <span className="text-xs text-slate-400 flex-shrink-0">{progress}%</span>
               <button
-                onClick={() => currentIndex < mockLessons.length - 1 && setCurrentLesson(mockLessons[currentIndex + 1])}
-                disabled={currentIndex === mockLessons.length - 1}
+                onClick={() => currentIndex < lessons.length - 1 && setCurrentLesson(lessons[currentIndex + 1])}
+                disabled={currentIndex === lessons.length - 1}
                 className="flex items-center gap-1 text-sm text-slate-400 hover:text-white disabled:opacity-40 transition-colors"
               >
                 {t('player.nextLesson')}
@@ -99,7 +221,7 @@ export default function PlayerPage() {
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'curriculum' && (
               <div className="p-2">
-                {mockLessons.map((lesson, i) => (
+                {lessons.map((lesson, i) => (
                   <button
                     key={lesson.id}
                     onClick={() => setCurrentLesson(lesson)}
@@ -112,11 +234,9 @@ export default function PlayerPage() {
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
                       lesson.completed ? 'bg-green-500' : 'bg-slate-700'
                     }`}>
-                      {lesson.completed ? (
-                        <Check className="w-3 h-3 text-white" />
-                      ) : (
-                        <span className="text-xs text-slate-400">{i + 1}</span>
-                      )}
+                      {lesson.completed
+                        ? <Check className="w-3 h-3 text-white" />
+                        : <span className="text-xs text-slate-400">{i + 1}</span>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-medium truncate ${
@@ -124,7 +244,9 @@ export default function PlayerPage() {
                       }`}>
                         {lesson.title}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5">{lesson.duration}</p>
+                      {lesson.section && (
+                        <p className="text-xs text-slate-500 mt-0.5 truncate">{lesson.section}</p>
+                      )}
                     </div>
                   </button>
                 ))}
@@ -133,13 +255,23 @@ export default function PlayerPage() {
 
             {activeTab === 'notes' && (
               <div className="p-4">
+                <p className="text-xs text-slate-400 mb-3">
+                  Notes for: <span className="text-white">{currentLesson.title}</span>
+                </p>
                 <textarea
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder={t('player.addNote')}
                   className="input-field h-32 resize-none text-sm mb-3"
                 />
-                <button className="btn-primary w-full text-sm py-2">{t('player.saveNote')}</button>
+                <button
+                  onClick={handleSaveNote}
+                  disabled={savingNote || !note.trim()}
+                  className="btn-primary w-full text-sm py-2 flex items-center justify-center gap-2"
+                >
+                  {savingNote ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  {t('player.saveNote')}
+                </button>
               </div>
             )}
 

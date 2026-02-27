@@ -20,8 +20,8 @@ export default function RegisterPage() {
 
   const validate = () => {
     const e = {};
-    if (!form.firstName.trim()) e.firstName = t('auth.emailRequired').replace('Email', 'First name');
-    if (!form.lastName.trim()) e.lastName = t('auth.emailRequired').replace('Email', 'Last name');
+    if (!form.firstName.trim()) e.firstName = t('auth.firstNameRequired', { defaultValue: 'First name is required' });
+    if (!form.lastName.trim()) e.lastName = t('auth.lastNameRequired', { defaultValue: 'Last name is required' });
     if (!form.email) e.email = t('auth.emailRequired');
     else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = t('auth.invalidEmail');
     if (!form.password) e.password = t('auth.passwordRequired');

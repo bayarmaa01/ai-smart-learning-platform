@@ -3,21 +3,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Link, useSearchParams } from 'react-router-dom';
 import { fetchCourses, setFilters } from '../../store/slices/courseSlice';
-import { Search, Filter, Star, Users, Clock, BookOpen, ChevronRight, Loader2 } from 'lucide-react';
+import { Search, Star, Users, Clock, BookOpen, ChevronRight, Loader2 } from 'lucide-react';
 
 const CATEGORIES = ['All', 'Programming', 'Data Science', 'Design', 'Business', 'Marketing', 'DevOps', 'AI/ML'];
-const LEVELS = ['All', 'Beginner', 'Intermediate', 'Advanced'];
-
-const mockCourses = [
-  { id: '1', title: 'Machine Learning A-Z', instructor: 'Dr. Sarah Chen', category: 'AI/ML', level: 'Intermediate', rating: 4.8, students: 45230, duration: '42h', price: 0, thumbnail: null, isEnrolled: true },
-  { id: '2', title: 'React & Node.js Full Stack', instructor: 'John Smith', category: 'Programming', level: 'Intermediate', rating: 4.9, students: 38100, duration: '56h', price: 49.99, thumbnail: null, isEnrolled: false },
-  { id: '3', title: 'AWS Solutions Architect', instructor: 'Mike Johnson', category: 'DevOps', level: 'Advanced', rating: 4.7, students: 22400, duration: '38h', price: 79.99, thumbnail: null, isEnrolled: false },
-  { id: '4', title: 'Python for Data Science', instructor: 'Emma Wilson', category: 'Data Science', level: 'Beginner', rating: 4.6, students: 61200, duration: '28h', price: 0, thumbnail: null, isEnrolled: true },
-  { id: '5', title: 'UI/UX Design Masterclass', instructor: 'Lisa Park', category: 'Design', level: 'Beginner', rating: 4.8, students: 29800, duration: '32h', price: 39.99, thumbnail: null, isEnrolled: false },
-  { id: '6', title: 'Kubernetes & Docker', instructor: 'Alex Turner', category: 'DevOps', level: 'Advanced', rating: 4.9, students: 18600, duration: '44h', price: 59.99, thumbnail: null, isEnrolled: false },
-  { id: '7', title: 'Digital Marketing Pro', instructor: 'Rachel Green', category: 'Marketing', level: 'Beginner', rating: 4.5, students: 34500, duration: '24h', price: 29.99, thumbnail: null, isEnrolled: false },
-  { id: '8', title: 'Deep Learning with PyTorch', instructor: 'Dr. James Lee', category: 'AI/ML', level: 'Advanced', rating: 4.9, students: 15200, duration: '48h', price: 89.99, thumbnail: null, isEnrolled: false },
-];
+const LEVELS = ['All', 'beginner', 'intermediate', 'advanced'];
 
 function CourseCard({ course }) {
   const { t } = useTranslation();
@@ -25,50 +14,57 @@ function CourseCard({ course }) {
     'from-blue-600 to-purple-600', 'from-green-600 to-teal-600',
     'from-orange-600 to-red-600', 'from-pink-600 to-rose-600',
   ];
-  const gradient = gradients[parseInt(course.id) % gradients.length];
+  const seed = course.id ? parseInt(course.id.replace(/\D/g, '').slice(0, 4) || '0') : 0;
+  const gradient = gradients[seed % gradients.length];
+  const studentCount = course.total_enrollments ?? course.students ?? 0;
+  const price = parseFloat(course.price ?? 0);
 
   return (
     <div className="card hover:border-slate-600 transition-all duration-200 hover:-translate-y-1 group flex flex-col">
       <div className={`h-36 rounded-xl bg-gradient-to-br ${gradient} mb-4 flex items-center justify-center relative overflow-hidden`}>
         <BookOpen className="w-12 h-12 text-white/30" />
         <div className="absolute top-3 right-3 flex gap-2">
-          {course.price === 0 && <span className="badge-green text-xs">{t('courses.free')}</span>}
+          {price === 0 && <span className="badge-green text-xs">{t('courses.free')}</span>}
           {course.isEnrolled && <span className="badge-blue text-xs">{t('courses.enrolled')}</span>}
         </div>
       </div>
 
       <div className="flex-1 flex flex-col">
         <div className="flex items-center gap-2 mb-2">
-          <span className="badge-purple text-xs">{course.category}</span>
-          <span className="badge text-xs bg-slate-700 text-slate-300">{course.level}</span>
+          {course.category_name && <span className="badge-purple text-xs">{course.category_name}</span>}
+          {course.level && <span className="badge text-xs bg-slate-700 text-slate-300 capitalize">{course.level}</span>}
         </div>
 
         <h3 className="font-semibold text-white mb-1 line-clamp-2 group-hover:text-primary-400 transition-colors">
           {course.title}
         </h3>
-        <p className="text-sm text-slate-400 mb-3">{course.instructor}</p>
+        <p className="text-sm text-slate-400 mb-3">{course.instructor_name || course.instructor}</p>
 
         <div className="flex items-center gap-3 text-xs text-slate-400 mb-4">
-          <div className="flex items-center gap-1">
-            <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
-            <span className="text-white font-medium">{course.rating}</span>
-          </div>
+          {course.rating && (
+            <div className="flex items-center gap-1">
+              <Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" />
+              <span className="text-white font-medium">{parseFloat(course.rating).toFixed(1)}</span>
+            </div>
+          )}
           <div className="flex items-center gap-1">
             <Users className="w-3.5 h-3.5" />
-            <span>{(course.students / 1000).toFixed(1)}k</span>
+            <span>{studentCount > 999 ? `${(studentCount / 1000).toFixed(1)}k` : studentCount}</span>
           </div>
-          <div className="flex items-center gap-1">
-            <Clock className="w-3.5 h-3.5" />
-            <span>{course.duration}</span>
-          </div>
+          {course.total_duration_hours && (
+            <div className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              <span>{Math.round(course.total_duration_hours)}h</span>
+            </div>
+          )}
         </div>
 
         <div className="mt-auto flex items-center justify-between">
           <div>
-            {course.price === 0 ? (
+            {price === 0 ? (
               <span className="text-green-400 font-bold">{t('courses.free')}</span>
             ) : (
-              <span className="text-white font-bold">${course.price}</span>
+              <span className="text-white font-bold">${price.toFixed(2)}</span>
             )}
           </div>
           <Link
@@ -87,19 +83,26 @@ function CourseCard({ course }) {
 export default function CoursesPage() {
   const { t } = useTranslation();
   const dispatch = useDispatch();
-  const { filters } = useSelector((state) => state.courses);
+  const { list: courses, isLoading, total } = useSelector((state) => state.courses);
   const [searchParams] = useSearchParams();
   const [localSearch, setLocalSearch] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedLevel, setSelectedLevel] = useState('All');
+  const [debouncedSearch, setDebouncedSearch] = useState(localSearch);
 
-  const filteredCourses = mockCourses.filter((c) => {
-    const matchSearch = c.title.toLowerCase().includes(localSearch.toLowerCase()) ||
-      c.instructor.toLowerCase().includes(localSearch.toLowerCase());
-    const matchCategory = selectedCategory === 'All' || c.category === selectedCategory;
-    const matchLevel = selectedLevel === 'All' || c.level === selectedLevel;
-    return matchSearch && matchCategory && matchLevel;
-  });
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(localSearch), 400);
+    return () => clearTimeout(t);
+  }, [localSearch]);
+
+  useEffect(() => {
+    const params = {};
+    if (debouncedSearch) params.search = debouncedSearch;
+    if (selectedCategory !== 'All') params.category = selectedCategory;
+    if (selectedLevel !== 'All') params.level = selectedLevel;
+    dispatch(fetchCourses(params));
+    dispatch(setFilters({ search: debouncedSearch, category: selectedCategory !== 'All' ? selectedCategory : '', level: selectedLevel !== 'All' ? selectedLevel : '' }));
+  }, [dispatch, debouncedSearch, selectedCategory, selectedLevel]);
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -122,9 +125,12 @@ export default function CoursesPage() {
         <select
           value={selectedLevel}
           onChange={(e) => setSelectedLevel(e.target.value)}
-          className="input-field w-full sm:w-40"
+          className="input-field w-full sm:w-44"
         >
-          {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+          <option value="All">All Levels</option>
+          {LEVELS.slice(1).map((l) => (
+            <option key={l} value={l} className="capitalize">{l.charAt(0).toUpperCase() + l.slice(1)}</option>
+          ))}
         </select>
       </div>
 
@@ -146,11 +152,15 @@ export default function CoursesPage() {
 
       <div className="flex items-center justify-between">
         <p className="text-slate-400 text-sm">
-          <span className="text-white font-semibold">{filteredCourses.length}</span> courses found
+          <span className="text-white font-semibold">{total || courses.length}</span> {t('courses.found', { defaultValue: 'courses found' })}
         </p>
       </div>
 
-      {filteredCourses.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+        </div>
+      ) : courses.length === 0 ? (
         <div className="text-center py-16">
           <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-4" />
           <p className="text-slate-400">{t('courses.noCoursesFound')}</p>
@@ -158,7 +168,7 @@ export default function CoursesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filteredCourses.map((course) => (
+          {courses.map((course) => (
             <CourseCard key={course.id} course={course} />
           ))}
         </div>
