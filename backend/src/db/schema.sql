@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url TEXT,
     bio TEXT,
     language_preference VARCHAR(10) DEFAULT 'en',
+    placement_level VARCHAR(20) DEFAULT 'beginner',
     is_active BOOLEAN DEFAULT TRUE,
     is_email_verified BOOLEAN DEFAULT FALSE,
     email_verification_token VARCHAR(255),

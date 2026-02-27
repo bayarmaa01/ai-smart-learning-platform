@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Save, Globe, Shield, Bell, Database, Key } from 'lucide-react';
+import { Save, Globe, Shield, Bell, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../../services/api';
 
 export default function AdminSettings() {
   const { t } = useTranslation();
@@ -17,9 +18,25 @@ export default function AdminSettings() {
     sessionTimeout: 24,
     maxLoginAttempts: 5,
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    toast.success('Settings saved successfully');
+  useEffect(() => {
+    api.get('/admin/settings').then((res) => {
+      if (res.data.settings) setSettings((prev) => ({ ...prev, ...res.data.settings }));
+    }).catch(() => null).finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.patch('/admin/settings', settings);
+      toast.success('Settings saved successfully');
+    } catch {
+      toast.error('Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const Toggle = ({ name, label, description }) => (
@@ -41,6 +58,14 @@ export default function AdminSettings() {
     </div>
   );
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="w-8 h-8 text-primary-400 animate-spin" />
+      </div>
+    );
+  }
+
   const sections = [
     {
       icon: Globe, title: 'General Settings',
@@ -49,16 +74,22 @@ export default function AdminSettings() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">Platform Name</label>
-              <input value={settings.platformName} onChange={(e) => setSettings({ ...settings, platformName: e.target.value })} className="input-field" />
+              <input value={settings.platformName}
+                onChange={(e) => setSettings({ ...settings, platformName: e.target.value })}
+                className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">Support Email</label>
-              <input value={settings.supportEmail} onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })} className="input-field" />
+              <input value={settings.supportEmail}
+                onChange={(e) => setSettings({ ...settings, supportEmail: e.target.value })}
+                className="input-field" />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">Default Language</label>
-            <select value={settings.defaultLanguage} onChange={(e) => setSettings({ ...settings, defaultLanguage: e.target.value })} className="input-field w-48">
+            <select value={settings.defaultLanguage}
+              onChange={(e) => setSettings({ ...settings, defaultLanguage: e.target.value })}
+              className="input-field w-48">
               <option value="en">English</option>
               <option value="mn">Mongolian (Монгол)</option>
             </select>
@@ -70,17 +101,24 @@ export default function AdminSettings() {
       icon: Shield, title: 'Security Settings',
       content: (
         <div className="space-y-3">
-          <Toggle name="requireEmailVerification" label="Require Email Verification" description="Users must verify their email before accessing the platform" />
-          <Toggle name="enableRegistration" label="Allow New Registrations" description="Allow new users to create accounts" />
-          <Toggle name="maintenanceMode" label="Maintenance Mode" description="Temporarily disable access for non-admin users" />
+          <Toggle name="requireEmailVerification" label="Require Email Verification"
+            description="Users must verify their email before accessing the platform" />
+          <Toggle name="enableRegistration" label="Allow New Registrations"
+            description="Allow new users to create accounts" />
+          <Toggle name="maintenanceMode" label="Maintenance Mode"
+            description="Temporarily disable access for non-admin users" />
           <div className="grid grid-cols-2 gap-4 mt-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">Session Timeout (hours)</label>
-              <input type="number" value={settings.sessionTimeout} onChange={(e) => setSettings({ ...settings, sessionTimeout: Number(e.target.value) })} className="input-field" />
+              <input type="number" value={settings.sessionTimeout}
+                onChange={(e) => setSettings({ ...settings, sessionTimeout: Number(e.target.value) })}
+                className="input-field" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1.5">Max Login Attempts</label>
-              <input type="number" value={settings.maxLoginAttempts} onChange={(e) => setSettings({ ...settings, maxLoginAttempts: Number(e.target.value) })} className="input-field" />
+              <input type="number" value={settings.maxLoginAttempts}
+                onChange={(e) => setSettings({ ...settings, maxLoginAttempts: Number(e.target.value) })}
+                className="input-field" />
             </div>
           </div>
         </div>
@@ -90,7 +128,8 @@ export default function AdminSettings() {
       icon: Bell, title: 'Features',
       content: (
         <div className="space-y-3">
-          <Toggle name="enableAIChat" label="AI Chat Assistant" description="Enable the multilingual AI chatbot for all users" />
+          <Toggle name="enableAIChat" label="AI Chat Assistant"
+            description="Enable the multilingual AI chatbot for all users" />
         </div>
       ),
     },
@@ -115,8 +154,8 @@ export default function AdminSettings() {
         </div>
       ))}
 
-      <button onClick={handleSave} className="btn-primary flex items-center gap-2">
-        <Save className="w-4 h-4" />
+      <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
         {t('common.save')} Settings
       </button>
     </div>

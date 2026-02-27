@@ -29,6 +29,8 @@ import AdminAnalytics from './pages/admin/AdminAnalytics';
 import AdminSettings from './pages/admin/AdminSettings';
 
 import AIChatPage from './pages/ai/AIChat';
+import ProfilePage from './pages/student/Profile';
+import SettingsPage from './pages/student/Settings';
 import NotFoundPage from './pages/NotFound';
 
 export default function App() {
@@ -67,6 +69,8 @@ export default function App() {
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/subscription" element={<SubscriptionPage />} />
           <Route path="/ai-chat" element={<AIChatPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
 
           <Route element={<RoleGuard roles={['admin', 'super_admin']} />}>
             <Route path="/admin" element={<AdminDashboard />} />

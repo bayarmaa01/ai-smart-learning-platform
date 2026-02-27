@@ -6,6 +6,7 @@ const { query, transaction } = require('../db/connection');
 const { setCache, deleteCache, getCache, incrementCounter } = require('../cache/redis');
 const { AppError } = require('../middleware/errorHandler');
 const { logger } = require('../utils/logger');
+const { sendPasswordResetEmail, sendWelcomeEmail, sendVerificationEmail } = require('../utils/email');
 
 const generateTokens = (userId, role, tenantId) => {
   const accessToken = jwt.sign(
@@ -62,6 +63,10 @@ const register = async (req, res) => {
   );
 
   logger.info(`New user registered: ${email}`);
+
+  // Send welcome + verification emails (non-blocking)
+  sendWelcomeEmail(email, firstName).catch((err) => logger.error('Welcome email failed:', err));
+  sendVerificationEmail(email, firstName, verificationToken).catch((err) => logger.error('Verification email failed:', err));
 
   res.status(201).json({
     success: true,
@@ -247,6 +252,13 @@ const forgotPassword = async (req, res) => {
     await query(
       'UPDATE users SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3',
       [resetToken, resetExpires, result.rows[0].id]
+    );
+
+    const userResult = await query('SELECT first_name FROM users WHERE id = $1', [result.rows[0].id]);
+    const firstName = userResult.rows[0]?.first_name || 'User';
+
+    sendPasswordResetEmail(email, resetToken, firstName).catch((err) =>
+      logger.error('Password reset email failed:', err)
     );
 
     logger.info(`Password reset requested for: ${email}`);

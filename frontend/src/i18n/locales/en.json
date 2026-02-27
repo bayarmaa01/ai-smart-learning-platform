@@ -64,6 +64,8 @@
     "registerSuccess": "Account created successfully!",
     "loginError": "Invalid email or password",
     "emailRequired": "Email is required",
+    "firstNameRequired": "First name is required",
+    "lastNameRequired": "Last name is required",
     "passwordRequired": "Password is required",
     "passwordMinLength": "Password must be at least 8 characters",
     "passwordMismatch": "Passwords do not match",

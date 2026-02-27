@@ -66,4 +66,105 @@ router.patch('/users/:id/status', async (req, res) => {
   res.json({ success: true, message: `User ${isActive ? 'activated' : 'deactivated'}` });
 });
 
+router.get('/stats', async (req, res) => {
+  const [users, courses, revenue, subscriptions] = await Promise.all([
+    query('SELECT COUNT(*) AS total FROM users WHERE tenant_id = $1', [req.tenantId || '00000000-0000-0000-0000-000000000001']),
+    query('SELECT COUNT(*) AS total FROM courses WHERE tenant_id = $1', [req.tenantId || '00000000-0000-0000-0000-000000000001']),
+    query(`SELECT COALESCE(SUM(sp.price_monthly * 100), 0) AS total
+           FROM subscriptions s JOIN subscription_plans sp ON s.plan_id = sp.id
+           WHERE s.status = 'active'`),
+    query("SELECT COUNT(*) AS active FROM subscriptions WHERE status = 'active'"),
+  ]);
+
+  res.json({
+    success: true,
+    stats: {
+      totalUsers: parseInt(users.rows[0]?.total || 0),
+      totalCourses: parseInt(courses.rows[0]?.total || 0),
+      totalRevenue: parseFloat(revenue.rows[0]?.total || 0),
+      activeSubscriptions: parseInt(subscriptions.rows[0]?.active || 0),
+    },
+  });
+});
+
+router.get('/analytics/revenue', async (req, res) => {
+  const result = await query(
+    `SELECT TO_CHAR(DATE_TRUNC('month', s.created_at), 'Mon') AS month,
+            COALESCE(SUM(sp.price_monthly), 0) AS revenue
+     FROM subscriptions s
+     JOIN subscription_plans sp ON s.plan_id = sp.id
+     WHERE s.created_at >= NOW() - INTERVAL '6 months'
+     GROUP BY DATE_TRUNC('month', s.created_at)
+     ORDER BY DATE_TRUNC('month', s.created_at)`
+  );
+  res.json({ success: true, data: result.rows });
+});
+
+router.get('/analytics/user-growth', async (req, res) => {
+  const result = await query(
+    `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') AS month,
+            COUNT(*) AS users
+     FROM users
+     WHERE created_at >= NOW() - INTERVAL '6 months'
+     GROUP BY DATE_TRUNC('month', created_at)
+     ORDER BY DATE_TRUNC('month', created_at)`
+  );
+  res.json({ success: true, data: result.rows.map((r) => ({ ...r, users: parseInt(r.users) })) });
+});
+
+router.get('/health', async (req, res) => {
+  const { connectDB } = require('../db/connection');
+  const { connectRedis } = require('../cache/redis');
+  const axios = require('axios');
+
+  const services = [];
+
+  try {
+    await query('SELECT 1');
+    services.push({ name: 'PostgreSQL', status: 'healthy', uptime: 99 });
+  } catch {
+    services.push({ name: 'PostgreSQL', status: 'unhealthy', uptime: 0 });
+  }
+
+  try {
+    const { getCache } = require('../cache/redis');
+    await getCache('health:check');
+    services.push({ name: 'Redis', status: 'healthy', uptime: 99 });
+  } catch {
+    services.push({ name: 'Redis', status: 'unhealthy', uptime: 0 });
+  }
+
+  try {
+    await axios.get(`${process.env.AI_SERVICE_URL || 'http://localhost:8000'}/health`, { timeout: 3000 });
+    services.push({ name: 'AI Service', status: 'healthy', uptime: 95 });
+  } catch {
+    services.push({ name: 'AI Service', status: 'degraded', uptime: 0 });
+  }
+
+  services.push({ name: 'API Server', status: 'healthy', uptime: 100 });
+
+  res.json({ success: true, services });
+});
+
+let platformSettings = {
+  platformName: 'EduAI Platform',
+  supportEmail: 'support@eduai.com',
+  enableAIChat: true,
+  enableRegistration: true,
+  requireEmailVerification: true,
+  maintenanceMode: false,
+  defaultLanguage: 'en',
+  sessionTimeout: 24,
+  maxLoginAttempts: 5,
+};
+
+router.get('/settings', async (req, res) => {
+  res.json({ success: true, settings: platformSettings });
+});
+
+router.patch('/settings', async (req, res) => {
+  platformSettings = { ...platformSettings, ...req.body };
+  res.json({ success: true, settings: platformSettings, message: 'Settings updated' });
+});
+
 module.exports = router;

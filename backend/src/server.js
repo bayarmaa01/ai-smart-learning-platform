@@ -15,7 +15,8 @@ const { connectDB } = require('./db/connection');
 const { connectRedis } = require('./cache/redis');
 const { setupSocketIO } = require('./websocket/socket');
 const { setupMetrics } = require('./monitoring/metrics');
-const { errorHandler } = require('./middleware/errorHandler');
+const { errorHandler, notFound } = require('./middleware/errorHandler');
+const { resolveTenant } = require('./middleware/tenantMiddleware');
 const { logger } = require('./utils/logger');
 const routes = require('./routes');
 
@@ -82,8 +83,10 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.use(resolveTenant);
 app.use('/api/v1', routes);
 
+app.use(notFound);
 app.use(errorHandler);
 
 setupSocketIO(server);

@@ -64,6 +64,8 @@
     "registerSuccess": "Бүртгэл амжилттай үүслээ!",
     "loginError": "И-мэйл эсвэл нууц үг буруу байна",
     "emailRequired": "И-мэйл шаардлагатай",
+    "firstNameRequired": "Нэр шаардлагатай",
+    "lastNameRequired": "Овог шаардлагатай",
     "passwordRequired": "Нууц үг шаардлагатай",
     "passwordMinLength": "Нууц үг хамгийн багадаа 8 тэмдэгт байх ёстой",
     "passwordMismatch": "Нууц үг таарахгүй байна",
