@@ -1,0 +1,67 @@
+# Environment files - NEVER commit these
+.env
+.env.local
+.env.production
+.env.staging
+backend/.env
+ai-service/.env
+frontend/.env
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# Build outputs
+frontend/dist/
+frontend/build/
+backend/dist/
+*.egg-info/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Terraform state (use remote backend)
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# Kubernetes secrets (use sealed-secrets or external secrets)
+k8s/secrets.yaml
+
+# SSL certificates
+nginx/ssl/
+*.pem
+*.key
+*.crt
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Docker
+.dockerignore
+
+# Helm dependencies
+helm/eduai/charts/
+helm/eduai/Chart.lock

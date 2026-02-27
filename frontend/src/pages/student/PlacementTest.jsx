@@ -1,194 +1,205 @@
-import React, { useState } from "react";
-import { Moon, Sun, Menu, Bot, Video, Award, BarChart3 } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { motion } from "framer-motion";
+import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle, Clock, ChevronRight, Award } from 'lucide-react';
 
-// 🔥 Mock analytics data
-const analyticsData = [
-  { name: "Mon", hours: 1.2 },
-  { name: "Tue", hours: 2.4 },
-  { name: "Wed", hours: 3.1 },
-  { name: "Thu", hours: 2.2 },
-  { name: "Fri", hours: 4.5 },
-  { name: "Sat", hours: 3.7 },
-  { name: "Sun", hours: 5.2 },
+const questions = [
+  {
+    id: 1, category: 'Programming',
+    question: 'What is the time complexity of binary search?',
+    options: ['O(n)', 'O(log n)', 'O(n²)', 'O(1)'],
+    correct: 1,
+  },
+  {
+    id: 2, category: 'Data Science',
+    question: 'Which algorithm is used for classification problems?',
+    options: ['Linear Regression', 'K-Means', 'Logistic Regression', 'PCA'],
+    correct: 2,
+  },
+  {
+    id: 3, category: 'Web Dev',
+    question: 'What does REST stand for?',
+    options: ['Remote State Transfer', 'Representational State Transfer', 'Request State Transfer', 'Resource State Transfer'],
+    correct: 1,
+  },
+  {
+    id: 4, category: 'DevOps',
+    question: 'What is Docker used for?',
+    options: ['Database management', 'Container orchestration', 'Application containerization', 'Load balancing'],
+    correct: 2,
+  },
+  {
+    id: 5, category: 'Cloud',
+    question: 'Which AWS service is used for serverless computing?',
+    options: ['EC2', 'S3', 'Lambda', 'RDS'],
+    correct: 2,
+  },
 ];
 
-export default function FaangLMSDashboard() {
-  const [darkMode, setDarkMode] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+export default function PlacementTestPage() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [phase, setPhase] = useState('intro');
+  const [current, setCurrent] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [result, setResult] = useState(null);
 
-  return (
-    <div className={darkMode ? "dark" : ""}>
-      <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex">
-        {/* 📱 Mobile Sidebar */}
-        <motion.div
-          initial={{ x: -300 }}
-          animate={{ x: sidebarOpen ? 0 : -300 }}
-          className="fixed z-40 md:relative md:translate-x-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 h-full"
-        >
-          <div className="p-6 font-bold text-xl">🚀 AI LMS</div>
-          <nav className="space-y-2 px-4">
-            {["Dashboard", "Courses", "AI Tutor", "Certificates"].map((item) => (
-              <div
-                key={item}
-                className="p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-sm font-medium"
-              >
-                {item}
+  useEffect(() => {
+    if (phase !== 'test') return;
+    const timer = setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) { clearInterval(timer); handleSubmit(); return 0; }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [phase]);
+
+  const handleAnswer = (questionId, optionIndex) => {
+    setAnswers({ ...answers, [questionId]: optionIndex });
+  };
+
+  const handleSubmit = () => {
+    const score = questions.reduce((acc, q) => acc + (answers[q.id] === q.correct ? 1 : 0), 0);
+    const pct = (score / questions.length) * 100;
+    const level = pct >= 80 ? 'advanced' : pct >= 50 ? 'intermediate' : 'beginner';
+    setResult({ score, total: questions.length, pct, level });
+    setPhase('result');
+  };
+
+  const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+
+  if (phase === 'intro') {
+    return (
+      <div className="max-w-2xl mx-auto animate-slide-up">
+        <div className="card text-center">
+          <div className="w-16 h-16 bg-primary-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Award className="w-8 h-8 text-primary-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-3">{t('placement.title')}</h1>
+          <p className="text-slate-400 mb-8">{t('placement.subtitle')}</p>
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            {[
+              { label: 'Questions', value: questions.length },
+              { label: 'Time Limit', value: '5 min' },
+              { label: 'Categories', value: '5' },
+            ].map(({ label, value }) => (
+              <div key={label} className="p-4 bg-slate-800/50 rounded-xl">
+                <p className="text-2xl font-bold text-white">{value}</p>
+                <p className="text-sm text-slate-400">{label}</p>
               </div>
             ))}
-          </nav>
-        </motion.div>
+          </div>
+          <button onClick={() => setPhase('test')} className="btn-primary px-8 py-3 text-base">
+            {t('placement.start')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-        {/* Main Content */}
-        <div className="flex-1">
-          {/* Topbar */}
-          <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-            <div className="flex items-center gap-3">
-              <Menu
-                className="md:hidden cursor-pointer"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-              />
-              <h1 className="text-xl font-semibold">Welcome back 👋</h1>
-            </div>
+  if (phase === 'test') {
+    const q = questions[current];
+    return (
+      <div className="max-w-2xl mx-auto animate-slide-up">
+        <div className="flex items-center justify-between mb-6">
+          <span className="text-slate-400 text-sm">
+            {t('placement.question', { current: current + 1, total: questions.length })}
+          </span>
+          <div className="flex items-center gap-2 text-slate-400">
+            <Clock className="w-4 h-4" />
+            <span className={`font-mono font-semibold ${timeLeft < 60 ? 'text-red-400' : 'text-white'}`}>
+              {formatTime(timeLeft)}
+            </span>
+          </div>
+        </div>
 
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800"
-            >
-              {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
+        <div className="w-full bg-slate-700 rounded-full h-2 mb-6">
+          <div className="bg-primary-500 h-2 rounded-full transition-all" style={{ width: `${((current + 1) / questions.length) * 100}%` }} />
+        </div>
+
+        <div className="card">
+          <span className="badge-purple mb-4 inline-block">{q.category}</span>
+          <h2 className="text-lg font-semibold text-white mb-6">{q.question}</h2>
+          <div className="space-y-3">
+            {q.options.map((option, i) => (
+              <button
+                key={i}
+                onClick={() => handleAnswer(q.id, i)}
+                className={`w-full text-left p-4 rounded-xl border transition-all duration-200 ${
+                  answers[q.id] === i
+                    ? 'border-primary-500 bg-primary-600/20 text-white'
+                    : 'border-slate-700 hover:border-slate-500 text-slate-300 hover:bg-slate-800/50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                    answers[q.id] === i ? 'border-primary-500 bg-primary-500' : 'border-slate-600'
+                  }`}>
+                    {answers[q.id] === i && <div className="w-2 h-2 bg-white rounded-full" />}
+                  </div>
+                  <span className="text-sm">{option}</span>
+                </div>
+              </button>
+            ))}
           </div>
 
-          {/* Dashboard Grid */}
-          <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 📊 Analytics Card */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm"
+          <div className="flex justify-between mt-6">
+            <button
+              onClick={() => setCurrent(Math.max(0, current - 1))}
+              disabled={current === 0}
+              className="btn-secondary disabled:opacity-40"
             >
-              <div className="flex items-center gap-2 mb-4">
-                <BarChart3 className="text-indigo-500" />
-                <h2 className="font-semibold">Learning Analytics</h2>
-              </div>
-
-              <div style={{ width: "100%", height: 250 }}>
-                <ResponsiveContainer>
-                  <LineChart data={analyticsData}>
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="hours" strokeWidth={3} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </motion.div>
-
-            {/* 🤖 AI Recommendations */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Bot />
-                <h2 className="font-semibold">AI Learning Path</h2>
-              </div>
-
-              <p className="text-sm opacity-90 mb-4">
-                Based on your assessment, AI recommends:
-              </p>
-
-              <ul className="space-y-2 text-sm">
-                <li>✅ Advanced React Patterns</li>
-                <li>✅ System Design Basics</li>
-                <li>✅ Data Structures Level 2</li>
-              </ul>
-
-              <button className="mt-5 w-full bg-white text-indigo-600 font-semibold py-2 rounded-xl">
-                Start AI Path
+              {t('common.previous')}
+            </button>
+            {current < questions.length - 1 ? (
+              <button
+                onClick={() => setCurrent(current + 1)}
+                className="btn-primary flex items-center gap-2"
+              >
+                {t('common.next')} <ChevronRight className="w-4 h-4" />
               </button>
-            </motion.div>
-
-            {/* 🎥 Video Progress */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Video />
-                <h2 className="font-semibold">Video Progress</h2>
-              </div>
-
-              <div className="space-y-4">
-                <Progress label="React Mastery" value={75} />
-                <Progress label="AI Fundamentals" value={42} />
-                <Progress label="System Design" value={18} />
-              </div>
-            </motion.div>
-
-            {/* 🏆 Certificate Generator */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <Award />
-                <h2 className="font-semibold">Certificates</h2>
-              </div>
-
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                Generate verified certificates after course completion.
-              </p>
-
-              <button className="w-full bg-indigo-600 text-white py-2 rounded-xl font-semibold">
-                Generate Certificate
-              </button>
-            </motion.div>
-
-            {/* 💬 GPT Tutor */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="lg:col-span-3 bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <Bot />
-                <h2 className="font-semibold">GPT Tutor Chat</h2>
-              </div>
-
-              <div className="border rounded-xl p-4 h-40 overflow-y-auto text-sm bg-slate-50 dark:bg-slate-800">
-                🤖 Ask anything about your course…
-              </div>
-
-              <div className="flex gap-2 mt-3">
-                <input
-                  placeholder="Ask AI tutor..."
-                  className="flex-1 border rounded-xl px-3 py-2 bg-transparent"
-                />
-                <button className="bg-indigo-600 text-white px-4 rounded-xl">
-                  Send
-                </button>
-              </div>
-            </motion.div>
+            ) : (
+              <button onClick={handleSubmit} className="btn-primary">{t('placement.submit')}</button>
+            )}
           </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-function Progress({ label, value }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs mb-1">
-        <span>{label}</span>
-        <span>{value}%</span>
+  if (phase === 'result' && result) {
+    const levelColors = { beginner: 'text-green-400', intermediate: 'text-yellow-400', advanced: 'text-purple-400' };
+    return (
+      <div className="max-w-2xl mx-auto animate-slide-up">
+        <div className="card text-center">
+          <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-2">{t('placement.result')}</h1>
+          <p className="text-slate-400 mb-8">Based on your answers, we recommend:</p>
+
+          <div className="p-6 bg-slate-800/50 rounded-2xl mb-8">
+            <p className={`text-4xl font-bold mb-2 ${levelColors[result.level]}`}>
+              {t(`placement.${result.level}`)}
+            </p>
+            <p className="text-slate-400">
+              {result.score}/{result.total} correct ({Math.round(result.pct)}%)
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <button onClick={() => { setPhase('intro'); setAnswers({}); setCurrent(0); setTimeLeft(300); }}
+              className="btn-secondary flex-1">
+              {t('placement.retake')}
+            </button>
+            <button onClick={() => navigate('/courses')} className="btn-primary flex-1">
+              {t('placement.proceed')}
+            </button>
+          </div>
+        </div>
       </div>
-      <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full">
-        <div
-          className="bg-indigo-600 h-2 rounded-full"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-    </div>
-  );
+    );
+  }
+
+  return null;
 }

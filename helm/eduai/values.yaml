@@ -1,0 +1,175 @@
+# ============================================================
+# EduAI Platform - Helm Values
+# ============================================================
+
+global:
+  imageRegistry: "your-registry.io"
+  imagePullSecrets: []
+  storageClass: "standard"
+
+# ============================================================
+# Backend
+# ============================================================
+backend:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: eduai-backend
+    tag: "latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 5000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  env:
+    NODE_ENV: production
+    DB_POOL_MAX: "20"
+    LOG_LEVEL: info
+
+# ============================================================
+# AI Service
+# ============================================================
+aiService:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: eduai-ai-service
+    tag: "latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 60
+  env:
+    AI_PROVIDER: openai
+    OPENAI_MODEL: gpt-4-turbo-preview
+    MAX_TOKENS: "2000"
+    RATE_LIMIT_PER_MINUTE: "60"
+
+# ============================================================
+# Frontend
+# ============================================================
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: eduai-frontend
+    tag: "latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# ============================================================
+# Ingress
+# ============================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: eduai.yourdomain.com
+      paths:
+        - path: /api/
+          service: backend
+          port: 5000
+        - path: /ai/
+          service: ai-service
+          port: 8000
+        - path: /
+          service: frontend
+          port: 8080
+  tls:
+    - secretName: eduai-tls
+      hosts:
+        - eduai.yourdomain.com
+
+# ============================================================
+# PostgreSQL (Bitnami)
+# ============================================================
+postgresql:
+  enabled: true
+  auth:
+    database: eduai_db
+    username: postgres
+    existingSecret: eduai-secrets
+    secretKeys:
+      adminPasswordKey: DB_PASSWORD
+  primary:
+    persistence:
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+# ============================================================
+# Redis (Bitnami)
+# ============================================================
+redis:
+  enabled: true
+  auth:
+    existingSecret: eduai-secrets
+    existingSecretPasswordKey: REDIS_PASSWORD
+  master:
+    persistence:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+# ============================================================
+# Monitoring
+# ============================================================
+monitoring:
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+    adminPassword: "CHANGE_ME"
+
+# ============================================================
+# Secrets (reference only - use external secrets manager)
+# ============================================================
+secrets:
+  existingSecret: eduai-secrets
