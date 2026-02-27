@@ -1,29 +1,77 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import js from '@eslint/js';
+import reactPlugin from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
 
-export default defineConfig([
-  globalIgnores(['dist']),
+export default [
+  js.configs.recommended,
   {
-    files: ['**/*.{js,jsx}'],
-    extends: [
-      js.configs.recommended,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-    ],
+    plugins: {
+      react: reactPlugin,
+      'react-hooks': reactHooks,
+    },
     languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        console: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        fetch: 'readonly',
+        crypto: 'readonly',
+        process: 'readonly',
+        __dirname: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        FormData: 'readonly',
+        File: 'readonly',
+        Blob: 'readonly',
+        Event: 'readonly',
+        CustomEvent: 'readonly',
+        AbortController: 'readonly',
+        Promise: 'readonly',
+        Map: 'readonly',
+        Set: 'readonly',
+        WeakMap: 'readonly',
+        Symbol: 'readonly',
+        Proxy: 'readonly',
+        Reflect: 'readonly',
+        JSON: 'readonly',
+        Math: 'readonly',
+        Date: 'readonly',
+        Error: 'readonly',
+        parseInt: 'readonly',
+        parseFloat: 'readonly',
+        isNaN: 'readonly',
+        isFinite: 'readonly',
+        encodeURIComponent: 'readonly',
+        decodeURIComponent: 'readonly',
+      },
       parserOptions: {
-        ecmaVersion: 'latest',
         ecmaFeatures: { jsx: true },
-        sourceType: 'module',
       },
     },
+    settings: {
+      react: { version: 'detect' },
+    },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'prefer-const': 'error',
+      'no-var': 'error',
     },
   },
-])
+  {
+    ignores: ['dist/**', 'node_modules/**', '*.min.js'],
+  },
+];
