@@ -1,0 +1,53 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "eduai.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "eduai.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: {{ .Values.ingress.className | quote }}
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eduai.fullname" $ }}-backend
+                port:
+                  number: {{ $.Values.backend.service.port }}
+          - path: /ai/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eduai.fullname" $ }}-ai-service
+                port:
+                  number: {{ $.Values.aiService.service.port }}
+          - path: /socket.io/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eduai.fullname" $ }}-backend
+                port:
+                  number: {{ $.Values.backend.service.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "eduai.fullname" $ }}-frontend
+                port:
+                  number: {{ $.Values.frontend.service.port }}
+    {{- end }}
+{{- end }}
