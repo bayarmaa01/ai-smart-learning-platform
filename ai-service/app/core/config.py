@@ -25,16 +25,21 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/eduai_db"
 
-    # AI Provider (openai | anthropic | local)
-    AI_PROVIDER: str = "openai"
+    # AI Provider (openai | anthropic | ollama | huggingface | mock)
+    AI_PROVIDER: str = "mock"
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
     ANTHROPIC_API_KEY: str = ""
     ANTHROPIC_MODEL: str = "claude-3-sonnet-20240229"
 
-    # Local LLM (Ollama)
+    # Local LLM (Ollama) - FREE
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3"
+
+    # Hugging Face Inference API - FREE
+    HUGGINGFACE_API_KEY: str = ""
+    HUGGINGFACE_MODEL: str = "microsoft/DialoGPT-medium"
+    HUGGINGFACE_BASE_URL: str = "https://api-inference.huggingface.co/models"
 
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60

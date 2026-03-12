@@ -125,6 +125,59 @@ class OllamaProvider:
         )
 
 
+class HuggingFaceProvider:
+    """Free Hugging Face Inference API provider"""
+
+    def __init__(self):
+        import httpx
+        self.base_url = settings.HUGGINGFACE_BASE_URL
+        self.model = settings.HUGGINGFACE_MODEL
+        self.api_key = settings.HUGGINGFACE_API_KEY
+        self.client = httpx.AsyncClient(timeout=60.0)
+
+    async def generate(
+        self,
+        messages: List[LLMMessage],
+        system_prompt: str,
+        max_tokens: int = 1000,
+        temperature: float = 0.7,
+    ) -> LLMResponse:
+        # For Hugging Face, we'll use a simpler approach
+        last_message = messages[-1].content if messages else ""
+        
+        headers = {}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        try:
+            # Use a text generation model
+            response = await self.client.post(
+                f"{self.base_url}/{self.model}",
+                json={
+                    "inputs": f"{system_prompt}\n\nUser: {last_message}\nAssistant:",
+                    "parameters": {
+                        "max_new_tokens": max_tokens,
+                        "temperature": temperature,
+                        "return_full_text": False,
+                    }
+                },
+                headers=headers
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            if isinstance(data, list) and len(data) > 0:
+                content = data[0].get("generated_text", "")
+            else:
+                content = data.get("generated_text", "")
+                
+            return LLMResponse(content=content, tokens_used=100, model=self.model)
+        except Exception as e:
+            logger.error(f"Hugging Face API error: {e}")
+            # Fallback to mock response
+            return await MockProvider().generate(messages, system_prompt, max_tokens, temperature)
+
+
 class MockProvider:
     """Fallback mock provider for development/testing"""
 
@@ -142,7 +195,7 @@ class MockProvider:
             response = (
                 f"Таны асуултад хариулж байна: **{last_message[:50]}...**\n\n"
                 "Энэ бол туршилтын хариулт юм. Бодит AI үйлчилгээг ашиглахын тулд "
-                "OpenAI эсвэл Anthropic API түлхүүрийг тохируулна уу.\n\n"
+                "Ollama (дотоод) эсвэл Hugging Face (үнэгүй) тохируулж болно.\n\n"
                 "**Санал болгох хичээлүүд:**\n"
                 "- Machine Learning үндэс\n"
                 "- Python програмчлал\n"
@@ -151,7 +204,7 @@ class MockProvider:
         else:
             response = (
                 f"Responding to your query: **{last_message[:50]}...**\n\n"
-                "This is a mock response. Configure OpenAI or Anthropic API keys for real AI responses.\n\n"
+                "This is a mock response. Configure Ollama (local) or Hugging Face (free) for real AI responses.\n\n"
                 "**Recommended courses:**\n"
                 "- Machine Learning Fundamentals\n"
                 "- Python Programming\n"
@@ -172,8 +225,11 @@ def get_llm_provider():
         logger.info("Using Anthropic provider")
         return AnthropicProvider()
     elif provider == "ollama":
-        logger.info("Using Ollama (local) provider")
+        logger.info("Using Ollama (local) provider - FREE")
         return OllamaProvider()
+    elif provider == "huggingface":
+        logger.info("Using Hugging Face provider - FREE")
+        return HuggingFaceProvider()
     else:
         logger.warning("No AI provider configured, using mock provider")
         return MockProvider()
