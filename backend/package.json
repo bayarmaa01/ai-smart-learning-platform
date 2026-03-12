@@ -9,7 +9,11 @@
     "test": "jest --coverage",
     "lint": "eslint src --ext .js",
     "migrate": "node src/db/migrate.js",
-    "seed": "node src/db/seed.js"
+    "seed": "node src/db/seed.js",
+    "db:init": "node src/db/init.js",
+    "db:reset": "node src/db/init.js reset",
+    "db:status": "node src/db/init.js status",
+    "setup": "npm run db:init && npm run seed"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.525.0",
