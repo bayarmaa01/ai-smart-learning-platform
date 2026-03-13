@@ -65,7 +65,7 @@ export default function RegisterPage() {
     }
     
     // Role validation
-    if (!form.role || !['student', 'teacher'].includes(form.role)) {
+    if (!form.role || !['student', 'instructor'].includes(form.role)) {
       e.role = t('auth.roleRequired', { defaultValue: 'Please select a role' });
     }
     
@@ -161,7 +161,7 @@ export default function RegisterPage() {
             className={`w-full bg-slate-800/50 text-slate-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 ${errors.role ? 'border-red-500 focus:ring-red-500' : 'border-slate-600/50'}`}
           >
             <option value="student">{t('auth.student', { defaultValue: 'Student' })}</option>
-            <option value="teacher">{t('auth.teacher', { defaultValue: 'Teacher' })}</option>
+            <option value="instructor">{t('auth.instructor', { defaultValue: 'Instructor' })}</option>
           </select>
           {errors.role && <p className="mt-1 text-xs text-red-400">{errors.role}</p>}
         </div>

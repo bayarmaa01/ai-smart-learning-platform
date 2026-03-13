@@ -40,8 +40,8 @@ const register = async (req, res) => {
     throw new AppError('Password must be at least 8 characters', 400, 'PASSWORD_TOO_SHORT');
   }
 
-  if (!['student', 'teacher'].includes(role)) {
-    throw new AppError('Invalid role. Must be student or teacher', 400, 'INVALID_ROLE');
+  if (!['student', 'instructor'].includes(role)) {
+    throw new AppError('Invalid role. Must be student or instructor', 400, 'INVALID_ROLE');
   }
 
   // Check for existing user
