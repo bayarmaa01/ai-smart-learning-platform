@@ -21,4 +21,3 @@ cachetools==5.3.3
 python-dotenv==1.0.1
 pytest==8.0.2
 pytest-asyncio==0.23.5
-httpx==0.27.0
