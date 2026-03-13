@@ -10,7 +10,7 @@
   }
 
   * {
-    @apply border-border;
+    @apply border border-slate-700;
   }
 
   body {
