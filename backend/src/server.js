@@ -83,6 +83,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/api/v1/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: process.env.npm_package_version || '1.0.0',
+    environment: process.env.NODE_ENV,
+    api: 'v1',
+  });
+});
+
 app.use(resolveTenant);
 app.use('/api/v1', routes);
 
