@@ -13,10 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Upgrade pip and install wheel for faster builds
+RUN pip install --no-cache-dir --upgrade pip wheel
+
+# Copy requirements first for better caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --user -r requirements.txt
+
+# Install Python dependencies with wheel cache
+RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: Production
 FROM python:3.11-slim AS production
