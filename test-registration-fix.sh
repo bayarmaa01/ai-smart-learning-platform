@@ -13,67 +13,68 @@ curl -f http://localhost:5000/api/v1/health 2>/dev/null && echo " ✅ API health
 
 # Test 3: Valid registration (student)
 echo "3. Testing student registration..."
-STUDENT_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000/api/v1/auth/register \
+TIMESTAMP=$(date +%s)
+STUDENT_EMAIL="student_${TIMESTAMP}@example.com"
+STUDENT_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{
-    "firstName": "John",
-    "lastName": "Student",
-    "email": "student@example.com",
-    "password": "Student123!",
-    "role": "student"
-  }')
+  -d "{
+    \"firstName\": \"John\",
+    \"lastName\": \"Student\",
+    \"email\": \"${STUDENT_EMAIL}\",
+    \"password\": \"Student123!\",
+    \"role\": \"student\"
+  }")
 
-STUDENT_STATUS=$(echo "$STUDENT_RESPONSE" | tail -c 3)
-if [ "$STUDENT_STATUS" = "201" ]; then
-    echo " ✅ Student registration successful (201)"
+if echo "$STUDENT_RESPONSE" | grep -q '"success":true'; then
+    echo " ✅ Student registration successful"
 else
-    echo " ❌ Student registration failed ($STUDENT_STATUS)"
+    echo " ❌ Student registration failed"
     echo "$STUDENT_RESPONSE"
 fi
 
 # Test 4: Valid registration (admin)
 echo "4. Testing admin registration..."
-ADMIN_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000/api/v1/auth/register \
+TIMESTAMP2=$(date +%s)
+ADMIN_EMAIL="admin_${TIMESTAMP2}@example.com"
+ADMIN_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{
-    "firstName": "Jane",
-    "lastName": "Admin",
-    "email": "admin@example.com",
-    "password": "Admin123!",
-    "role": "admin"
-  }')
+  -d "{
+    \"firstName\": \"Jane\",
+    \"lastName\": \"Admin\",
+    \"email\": \"${ADMIN_EMAIL}\",
+    \"password\": \"Admin123!\",
+    \"role\": \"admin\"
+  }")
 
-ADMIN_STATUS=$(echo "$ADMIN_RESPONSE" | tail -c 3)
-if [ "$ADMIN_STATUS" = "201" ]; then
-    echo " ✅ Admin registration successful (201)"
+if echo "$ADMIN_RESPONSE" | grep -q '"success":true'; then
+    echo " ✅ Admin registration successful"
 else
-    echo " ❌ Admin registration failed ($ADMIN_STATUS)"
+    echo " ❌ Admin registration failed"
     echo "$ADMIN_RESPONSE"
 fi
 
 # Test 5: Duplicate email
 echo "5. Testing duplicate email..."
-DUPLICATE_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000/api/v1/auth/register \
+DUPLICATE_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
-  -d '{
-    "firstName": "Duplicate",
-    "lastName": "User",
-    "email": "student@example.com",
-    "password": "Duplicate123!",
-    "role": "student"
-  }')
+  -d "{
+    \"firstName\": \"Duplicate\",
+    \"lastName\": \"User\",
+    \"email\": \"${STUDENT_EMAIL}\",
+    \"password\": \"Duplicate123!\",
+    \"role\": \"student\"
+  }")
 
-DUPLICATE_STATUS=$(echo "$DUPLICATE_RESPONSE" | tail -c 3)
-if [ "$DUPLICATE_STATUS" = "409" ]; then
-    echo " ✅ Duplicate email properly rejected (409)"
+if echo "$DUPLICATE_RESPONSE" | grep -q '"code":"EMAIL_EXISTS"'; then
+    echo " ✅ Duplicate email properly rejected"
 else
-    echo " ❌ Duplicate email not handled correctly ($DUPLICATE_STATUS)"
+    echo " ❌ Duplicate email not handled correctly"
     echo "$DUPLICATE_RESPONSE"
 fi
 
 # Test 6: Invalid email
 echo "6. Testing invalid email..."
-INVALID_EMAIL_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000/api/v1/auth/register \
+INVALID_EMAIL_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{
     "firstName": "Invalid",
@@ -83,16 +84,16 @@ INVALID_EMAIL_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000
     "role": "student"
   }')
 
-INVALID_EMAIL_STATUS=$(echo "$INVALID_EMAIL_RESPONSE" | tail -c 3)
-if [ "$INVALID_EMAIL_STATUS" = "400" ]; then
-    echo " ✅ Invalid email properly rejected (400)"
+if echo "$INVALID_EMAIL_RESPONSE" | grep -q '"code":"INVALID_EMAIL"'; then
+    echo " ✅ Invalid email properly rejected"
 else
-    echo " ❌ Invalid email not handled correctly ($INVALID_EMAIL_STATUS)"
+    echo " ❌ Invalid email not handled correctly"
+    echo "$INVALID_EMAIL_RESPONSE"
 fi
 
 # Test 7: Short password
 echo "7. Testing short password..."
-SHORT_PASSWORD_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000/api/v1/auth/register \
+SHORT_PASSWORD_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{
     "firstName": "Short",
@@ -102,16 +103,16 @@ SHORT_PASSWORD_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:500
     "role": "student"
   }')
 
-SHORT_PASSWORD_STATUS=$(echo "$SHORT_PASSWORD_RESPONSE" | tail -c 3)
-if [ "$SHORT_PASSWORD_STATUS" = "400" ]; then
-    echo " ✅ Short password properly rejected (400)"
+if echo "$SHORT_PASSWORD_RESPONSE" | grep -q '"code":"PASSWORD_TOO_SHORT"'; then
+    echo " ✅ Short password properly rejected"
 else
-    echo " ❌ Short password not handled correctly ($SHORT_PASSWORD_STATUS)"
+    echo " ❌ Short password not handled correctly"
+    echo "$SHORT_PASSWORD_RESPONSE"
 fi
 
 # Test 8: Missing fields
 echo "8. Testing missing fields..."
-MISSING_FIELDS_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:5000/api/v1/auth/register \
+MISSING_FIELDS_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{
     "firstName": "Missing",
@@ -120,15 +121,19 @@ MISSING_FIELDS_RESPONSE=$(curl -s -w "%{http_code}" -X POST http://localhost:500
     "role": "student"
   }')
 
-MISSING_FIELDS_STATUS=$(echo "$MISSING_FIELDS_RESPONSE" | tail -c 3)
-if [ "$MISSING_FIELDS_STATUS" = "400" ]; then
-    echo " ✅ Missing fields properly rejected (400)"
+if echo "$MISSING_FIELDS_RESPONSE" | grep -q '"code":"VALIDATION_ERROR"'; then
+    echo " ✅ Missing fields properly rejected"
 else
-    echo " ❌ Missing fields not handled correctly ($MISSING_FIELDS_STATUS)"
+    echo " ❌ Missing fields not handled correctly"
+    echo "$MISSING_FIELDS_RESPONSE"
 fi
 
 echo ""
 echo "🎉 Registration System Tests Complete!"
+echo ""
+echo "📊 Test Results Summary:"
+echo "  - Student registration: ${STUDENT_EMAIL}"
+echo "  - Admin registration: ${ADMIN_EMAIL}"
 echo ""
 echo "🌐 Test in browser:"
 echo "  1. Open http://localhost:3000"
