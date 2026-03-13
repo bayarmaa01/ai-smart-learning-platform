@@ -10,7 +10,7 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Role-based redirection
+  // Role-based redirection only if we have user data
   if (user) {
     const currentPath = location.pathname;
     
@@ -33,8 +33,11 @@ export default function ProtectedRoute() {
       return <Navigate to="/dashboard" replace />;
     }
 
-    // Prevent instructors from accessing student routes
-    if (user.role === 'instructor' && !currentPath.startsWith('/instructor') && !currentPath.startsWith('/profile') && !currentPath.startsWith('/settings')) {
+    // Prevent instructors from accessing student routes (allow shared routes)
+    const sharedRoutes = ['/profile', '/settings', '/ai-chat'];
+    const isSharedRoute = sharedRoutes.some(route => currentPath.startsWith(route));
+    
+    if (user.role === 'instructor' && !currentPath.startsWith('/instructor') && !isSharedRoute) {
       return <Navigate to="/instructor/dashboard" replace />;
     }
 
