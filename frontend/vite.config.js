@@ -17,7 +17,7 @@ export default defineConfig({
         changeOrigin: true,
       },
       '/ai': {
-        target: process.env.VITE_AI_URL || 'http://localhost:8000',
+        target: process.env.VITE_AI_URL || 'http://localhost:8001',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/ai/, ''),
       },
