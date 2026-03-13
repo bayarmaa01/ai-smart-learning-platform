@@ -25,36 +25,57 @@ const generateTokens = (userId, role, tenantId) => {
 };
 
 const register = async (req, res) => {
-  const { email, password, firstName, lastName, tenantId } = req.body;
+  const { email, password, firstName, lastName, role = 'student', tenantId } = req.body;
 
+  // Validation
+  if (!email || !password || !firstName || !lastName) {
+    throw new AppError('All fields are required', 400, 'VALIDATION_ERROR');
+  }
+
+  if (!/\S+@\S+\.\S+/.test(email)) {
+    throw new AppError('Invalid email format', 400, 'INVALID_EMAIL');
+  }
+
+  if (password.length < 8) {
+    throw new AppError('Password must be at least 8 characters', 400, 'PASSWORD_TOO_SHORT');
+  }
+
+  if (!['student', 'admin'].includes(role)) {
+    throw new AppError('Invalid role. Must be student or admin', 400, 'INVALID_ROLE');
+  }
+
+  // Check for existing user
+  const resolvedTenantId = tenantId || '00000000-0000-0000-0000-000000000001';
   const existingUser = await query(
     'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
-    [email, tenantId || '00000000-0000-0000-0000-000000000001']
+    [email, resolvedTenantId]
   );
 
   if (existingUser.rows.length > 0) {
     throw new AppError('Email already registered', 409, 'EMAIL_EXISTS');
   }
 
+  // Rate limiting
   const failedAttempts = await incrementCounter(`register:${req.ip}`, 3600);
   if (failedAttempts > 10) {
     throw new AppError('Too many registration attempts', 429, 'RATE_LIMIT');
   }
 
+  // Create user
   const passwordHash = await bcrypt.hash(password, 12);
   const verificationToken = crypto.randomBytes(32).toString('hex');
-  const resolvedTenantId = tenantId || '00000000-0000-0000-0000-000000000001';
 
   const result = await query(
-    `INSERT INTO users (email, password_hash, first_name, last_name, tenant_id, email_verification_token)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO users (email, password_hash, first_name, last_name, role, tenant_id, email_verification_token)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id, email, first_name, last_name, role, tenant_id, language_preference`,
-    [email, passwordHash, firstName, lastName, resolvedTenantId, verificationToken]
+    [email, passwordHash, firstName, lastName, role, resolvedTenantId, verificationToken]
   );
 
   const user = result.rows[0];
   const { accessToken, refreshToken } = generateTokens(user.id, user.role, user.tenant_id);
 
+  // Store refresh token
   const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
   await query(
     `INSERT INTO refresh_tokens (user_id, token_hash, ip_address, expires_at)
@@ -62,7 +83,7 @@ const register = async (req, res) => {
     [user.id, refreshTokenHash, req.ip]
   );
 
-  logger.info(`New user registered: ${email}`);
+  logger.info(`New user registered: ${email} with role: ${role}`);
 
   // Send welcome + verification emails (non-blocking)
   sendWelcomeEmail(email, firstName).catch((err) => logger.error('Welcome email failed:', err));
