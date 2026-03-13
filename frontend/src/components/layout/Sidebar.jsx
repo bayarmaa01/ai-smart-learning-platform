@@ -16,6 +16,15 @@ const studentLinks = [
   { to: '/subscription', icon: CreditCard, labelKey: 'nav.subscription' },
 ];
 
+const instructorLinks = [
+  { to: '/instructor/dashboard', icon: LayoutDashboard, labelKey: 'instructor.dashboard' },
+  { to: '/instructor/courses', icon: BookOpen, labelKey: 'instructor.myCourses' },
+  { to: '/instructor/create-course', icon: Plus, labelKey: 'instructor.createCourse' },
+  { to: '/instructor/students', icon: Users, labelKey: 'instructor.students' },
+  { to: '/instructor/analytics', icon: BarChart3, labelKey: 'instructor.analytics' },
+  { to: '/ai-chat', icon: Bot, labelKey: 'nav.aiChat' },
+];
+
 const adminLinks = [
   { to: '/admin', icon: Shield, labelKey: 'nav.admin' },
   { to: '/admin/users', icon: Users, labelKey: 'admin.users' },
@@ -28,6 +37,22 @@ export default function Sidebar({ isOpen, onClose }) {
   const { t } = useTranslation();
   const { user } = useSelector((state) => state.auth);
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isInstructor = user?.role === 'instructor';
+  const isStudent = user?.role === 'student';
+
+  const getNavLinks = () => {
+    if (isInstructor) return instructorLinks;
+    if (isAdmin) return adminLinks;
+    return studentLinks;
+  };
+
+  const getNavTitle = () => {
+    if (isInstructor) return t('instructor.instructor', { defaultValue: 'Instructor' });
+    if (isAdmin) return t('nav.administration', { defaultValue: 'Administration' });
+    return t('nav.home', { defaultValue: 'Home' });
+  };
+
+  const navLinks = getNavLinks();
 
   return (
     <>
@@ -57,13 +82,13 @@ export default function Sidebar({ isOpen, onClose }) {
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           <div className="mb-4">
             <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              {t('nav.home')}
+              {getNavTitle()}
             </p>
-            {studentLinks.map(({ to, icon: Icon, labelKey }) => (
+            {navLinks.map(({ to, icon: Icon, labelKey }) => (
               <NavLink
                 key={to}
                 to={to}
-                end={to === '/dashboard'}
+                end={to === '/dashboard' || to === '/instructor/dashboard' || to === '/admin'}
                 className={({ isActive }) =>
                   `sidebar-link ${isActive ? 'active' : ''}`
                 }
@@ -74,10 +99,11 @@ export default function Sidebar({ isOpen, onClose }) {
             ))}
           </div>
 
-          {isAdmin && (
+          {/* Show admin section for instructors if they also have admin access */}
+          {isInstructor && isAdmin && (
             <div>
               <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-4">
-                Administration
+                {t('nav.administration', { defaultValue: 'Administration' })}
               </p>
               {adminLinks.map(({ to, icon: Icon, labelKey }) => (
                 <NavLink

@@ -22,6 +22,12 @@ import ProgressPage from './pages/student/Progress';
 import CertificatesPage from './pages/student/Certificates';
 import SubscriptionPage from './pages/student/Subscription';
 
+import InstructorDashboard from './pages/instructor/Dashboard';
+import InstructorCourses from './pages/instructor/Courses';
+import CreateCourse from './pages/instructor/CreateCourse';
+import InstructorStudents from './pages/instructor/Students';
+import InstructorAnalytics from './pages/instructor/Analytics';
+
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminCourses from './pages/admin/AdminCourses';
@@ -60,6 +66,7 @@ export default function App() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<DashboardLayout />}>
+          {/* Student Routes */}
           <Route path="/dashboard" element={<StudentDashboard />} />
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/courses/:id" element={<CourseDetailPage />} />
@@ -68,10 +75,20 @@ export default function App() {
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/certificates" element={<CertificatesPage />} />
           <Route path="/subscription" element={<SubscriptionPage />} />
+
+          {/* Instructor Routes */}
+          <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
+          <Route path="/instructor/courses" element={<InstructorCourses />} />
+          <Route path="/instructor/create-course" element={<CreateCourse />} />
+          <Route path="/instructor/students" element={<InstructorStudents />} />
+          <Route path="/instructor/analytics" element={<InstructorAnalytics />} />
+
+          {/* Shared Routes */}
           <Route path="/ai-chat" element={<AIChatPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
 
+          {/* Admin Routes */}
           <Route element={<RoleGuard roles={['admin', 'super_admin']} />}>
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/users" element={<AdminUsers />} />
