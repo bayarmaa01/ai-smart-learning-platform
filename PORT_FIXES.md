@@ -12,13 +12,13 @@ Due to local port conflicts, the following external ports have been changed:
 | MinIO Console | 9001 | 9003 | 9001 |
 | PostgreSQL | 5432 | 5433 | 5432 |
 | AI Service | 8000 | 8001 | 8000 |
+| Backend | 5000 | 5001 | 5000 |
 
 ### Unchanged Ports
 
 | Service | Port | Notes |
 |---------|------|-------|
 | Frontend | 3000 | No conflict |
-| Backend | 5000 | No conflict |
 | Redis | 6379 | No conflict |
 | Grafana | 3001 | No conflict |
 | Prometheus | 9090 | No conflict |
@@ -28,7 +28,7 @@ Due to local port conflicts, the following external ports have been changed:
 
 ### Platform Services
 - 📱 **Frontend**: http://localhost:3000
-- 🔧 **Backend API**: http://localhost:5000
+- 🔧 **Backend API**: http://localhost:5001
 - 🤖 **AI Service**: http://localhost:8001
 
 ### Monitoring & Tools
