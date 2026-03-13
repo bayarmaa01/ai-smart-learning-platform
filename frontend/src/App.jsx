@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchCurrentUser } from './store/slices/authSlice';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
@@ -57,50 +58,52 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route element={<AuthLayout />}>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      </Route>
+    <ErrorBoundary>
+      <Routes>
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        </Route>
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<DashboardLayout />}>
-          {/* Student Routes */}
-          <Route path="/dashboard" element={<StudentDashboard />} />
-          <Route path="/courses" element={<CoursesPage />} />
-          <Route path="/courses/:id" element={<CourseDetailPage />} />
-          <Route path="/courses/:id/learn" element={<PlayerPage />} />
-          <Route path="/placement-test" element={<PlacementTestPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
-          <Route path="/certificates" element={<CertificatesPage />} />
-          <Route path="/subscription" element={<SubscriptionPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<DashboardLayout />}>
+            {/* Student Routes */}
+            <Route path="/dashboard" element={<StudentDashboard />} />
+            <Route path="/courses" element={<CoursesPage />} />
+            <Route path="/courses/:id" element={<CourseDetailPage />} />
+            <Route path="/courses/:id/learn" element={<PlayerPage />} />
+            <Route path="/placement-test" element={<PlacementTestPage />} />
+            <Route path="/progress" element={<ProgressPage />} />
+            <Route path="/certificates" element={<CertificatesPage />} />
+            <Route path="/subscription" element={<SubscriptionPage />} />
 
-          {/* Instructor Routes */}
-          <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
-          <Route path="/instructor/courses" element={<InstructorCourses />} />
-          <Route path="/instructor/create-course" element={<CreateCourse />} />
-          <Route path="/instructor/students" element={<InstructorStudents />} />
-          <Route path="/instructor/analytics" element={<InstructorAnalytics />} />
+            {/* Instructor Routes */}
+            <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
+            <Route path="/instructor/courses" element={<InstructorCourses />} />
+            <Route path="/instructor/create-course" element={<CreateCourse />} />
+            <Route path="/instructor/students" element={<InstructorStudents />} />
+            <Route path="/instructor/analytics" element={<InstructorAnalytics />} />
 
-          {/* Shared Routes */}
-          <Route path="/ai-chat" element={<AIChatPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+            {/* Shared Routes */}
+            <Route path="/ai-chat" element={<AIChatPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
 
-          {/* Admin Routes */}
-          <Route element={<RoleGuard roles={['admin', 'super_admin']} />}>
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/users" element={<AdminUsers />} />
-            <Route path="/admin/courses" element={<AdminCourses />} />
-            <Route path="/admin/analytics" element={<AdminAnalytics />} />
-            <Route path="/admin/settings" element={<AdminSettings />} />
+            {/* Admin Routes */}
+            <Route element={<RoleGuard roles={['admin', 'super_admin']} />}>
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/users" element={<AdminUsers />} />
+              <Route path="/admin/courses" element={<AdminCourses />} />
+              <Route path="/admin/analytics" element={<AdminAnalytics />} />
+              <Route path="/admin/settings" element={<AdminSettings />} />
+            </Route>
           </Route>
         </Route>
-      </Route>
 
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </ErrorBoundary>
   );
 }
