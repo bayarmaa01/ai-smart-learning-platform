@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import {
   LayoutDashboard, BookOpen, TrendingUp, Award, CreditCard,
-  Bot, Users, BarChart3, Settings, Shield, X, GraduationCap
+  Bot, Users, BarChart3, Settings, Shield, X, GraduationCap, Plus
 } from 'lucide-react';
 
 const studentLinks = [
