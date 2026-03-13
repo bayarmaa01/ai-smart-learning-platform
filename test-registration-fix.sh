@@ -32,6 +32,9 @@ else
     echo "$STUDENT_RESPONSE"
 fi
 
+# Wait a bit to avoid rate limiting
+sleep 2
+
 # Test 4: Valid registration (admin)
 echo "4. Testing admin registration..."
 TIMESTAMP2=$(date +%s)
@@ -53,6 +56,9 @@ else
     echo "$ADMIN_RESPONSE"
 fi
 
+# Wait a bit to avoid rate limiting
+sleep 2
+
 # Test 5: Duplicate email
 echo "5. Testing duplicate email..."
 DUPLICATE_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
@@ -71,6 +77,9 @@ else
     echo " ❌ Duplicate email not handled correctly"
     echo "$DUPLICATE_RESPONSE"
 fi
+
+# Wait a bit to avoid rate limiting
+sleep 2
 
 # Test 6: Invalid email
 echo "6. Testing invalid email..."
@@ -91,6 +100,9 @@ else
     echo "$INVALID_EMAIL_RESPONSE"
 fi
 
+# Wait a bit to avoid rate limiting
+sleep 2
+
 # Test 7: Short password
 echo "7. Testing short password..."
 SHORT_PASSWORD_RESPONSE=$(curl -s -X POST http://localhost:5000/api/v1/auth/register \
@@ -109,6 +121,9 @@ else
     echo " ❌ Short password not handled correctly"
     echo "$SHORT_PASSWORD_RESPONSE"
 fi
+
+# Wait a bit to avoid rate limiting
+sleep 2
 
 # Test 8: Missing fields
 echo "8. Testing missing fields..."
@@ -146,3 +161,6 @@ echo "  - New users can register with any valid email"
 echo "  - Role selection works (student/admin)"
 echo "  - UI has no debug borders or grid lines"
 echo "  - Proper validation and error responses"
+echo ""
+echo "⚠️  If you see rate limiting errors:"
+echo "  Run: ./clear-rate-limit.sh"
