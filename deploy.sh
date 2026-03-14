@@ -19,6 +19,7 @@ NAMESPACE="eduai"
 MONITORING_NAMESPACE="monitoring"
 DOMAIN="ailearn.duckdns.org"
 CLUSTER_NAME="ailearn-cluster"
+DOCKER_USERNAME="bayarmaa"
 
 # Helper functions
 log_info() {
