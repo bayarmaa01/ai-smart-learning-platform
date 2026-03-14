@@ -31,7 +31,7 @@ BACKEND_IMAGE="$DOCKER_USERNAME/eduai-backend:latest"
 AI_IMAGE="$DOCKER_USERNAME/eduai-ai-service:latest"
 
 MINIKUBE_CPUS=4
-MINIKUBE_MEMORY=8192
+MINIKUBE_MEMORY=6144
 
 ############################################
 # COLORS
