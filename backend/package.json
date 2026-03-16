@@ -9,7 +9,7 @@
     "test": "jest --coverage",
     "test:ci": "jest --coverage --ci --reporters=jest-junit --reporters=default --outputFile=test-results.xml",
     "test:watch": "jest --watch",
-    "lint": "eslint src --ext .js",
+    "lint": "eslint src --ext .js --fix",
     "migrate": "node src/db/migrate.js",
     "seed": "node src/db/seed.js",
     "db:init": "node src/db/init.js",
