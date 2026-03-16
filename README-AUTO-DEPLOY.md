@@ -10,7 +10,7 @@ This guide provides a complete automatic deployment solution for the AI Smart Le
 
 ```bash
 # Clone and deploy
-git clone https://github.com/your-org/ai-smart-learning-platform.git
+git clone https://github.com/bayarmaa01/ai-smart-learning-platform.git
 cd ai-smart-learning-platform
 chmod +x deploy.sh
 ./deploy.sh
