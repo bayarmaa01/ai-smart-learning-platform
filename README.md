@@ -309,7 +309,7 @@ kubectl create secret generic eduai-secrets \
 helm upgrade --install eduai ./helm/eduai \
   --namespace eduai \
   --values helm/eduai/values.yaml \
-  --set global.imageRegistry=your-registry.io \
+  --set global.imageRegistry=bayarmaa \
   --wait --timeout=10m
 
 # Check deployment

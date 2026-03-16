@@ -34,7 +34,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: backend
-          image: your-registry/eduai-backend:latest
+          image: bayarmaa/eduai-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 5000

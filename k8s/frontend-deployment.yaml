@@ -25,7 +25,7 @@ spec:
         runAsUser: 1001
       containers:
         - name: frontend
-          image: your-registry/eduai-frontend:latest
+          image: bayarmaa/eduai-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
