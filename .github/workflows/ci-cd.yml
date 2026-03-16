@@ -1,57 +1,373 @@
-name: EduAI DevOps CI/CD
+name: EDUAI CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: docker.io/bayarmaa
+  FRONTEND_IMAGE: bayarmaa/eduai-frontend
+  BACKEND_IMAGE: bayarmaa/eduai-backend
+  AI_IMAGE: bayarmaa/eduai-ai-service
+  SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
 jobs:
-  test:
+  # Lint and Test Job
+  lint-test:
+    name: Lint & Test
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Lint frontend
+      run: |
+        cd frontend
+        npm run lint
+        
+    - name: Test frontend
+      run: |
+        cd frontend
+        npm run test:ci
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm ci
+        
+    - name: Lint backend
+      run: |
+        cd backend
+        npm run lint
+        
+    - name: Test backend
+      run: |
+        cd backend
+        npm run test:ci
+        
+    - name: Install AI service dependencies
+      run: |
+        cd ai-service
+        pip install -r requirements-test.txt
+        
+    - name: Lint AI service
+      run: |
+        cd ai-service
+        flake8 src/
+        
+    - name: Test AI service
+      run: |
+        cd ai-service
+        python -m pytest tests/ -v
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Run tests
-        run: npm test || echo "No tests found"
-
+  # SonarCloud Analysis Job
   sonarcloud:
+    name: SonarCloud Analysis
     runs-on: ubuntu-latest
-    needs: test
-
+    needs: lint-test
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install backend dependencies
+      run: |
+        cd backend
+        npm ci
+        
+    - name: Install AI service dependencies
+      run: |
+        cd ai-service
+        pip install -r requirements-test.txt
+        
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.projectKey=bayarmaa01_ai-smart-learning-platform
+          -Dsonar.organization=bayarmaa01
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
+          -Dsonar.python.coverage.reportPaths=ai-service/coverage.xml
+          -Dsonar.sources=frontend/,backend/,ai-service/
+          -Dsonar.exclusions=**/node_modules/**,**/venv/**,**/__pycache__/**,**/coverage/**,**/dist/**
 
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  trivy:
+  # Security Scan Job
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
-    needs: sonarcloud
-
+    needs: [lint-test, sonarcloud]
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
 
+  # Build Docker Images Job
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint-test, security-scan]
+    outputs:
+      frontend-image: ${{ steps.build-frontend.outputs.image }}
+      backend-image: ${{ steps.build-backend.outputs.image }}
+      ai-image: ${{ steps.build-ai.outputs.image }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+        
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: |
+          ${{ env.FRONTEND_IMAGE }}
+          ${{ env.BACKEND_IMAGE }}
+          ${{ env.AI_IMAGE }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+          
+    - name: Build and push Frontend image
+      id: build-frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags.frontend }}
+        labels: ${{ steps.meta.outputs.labels.frontend }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Build and push Backend image
+      id: build-backend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags.backend }}
+        labels: ${{ steps.meta.outputs.labels.backend }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Build and push AI Service image
+      id: build-ai
+      uses: docker/build-push-action@v5
+      with:
+        context: ./ai-service
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: ${{ steps.meta.outputs.tags.ai }}
+        labels: ${{ steps.meta.outputs.labels.ai }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-      - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
-          format: table
-          exit-code: 0
+  # Deploy to Staging Job
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+        
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        
+    - name: Deploy to staging
+      run: |
+        export KUBECONFIG=kubeconfig
+        
+        # Apply manifests
+        kubectl apply -f k8s/ -n eduai-staging
+        
+        # Wait for rollout
+        kubectl rollout status deployment/frontend -n eduai-staging --timeout=300s
+        kubectl rollout status deployment/backend -n eduai-staging --timeout=300s
+        kubectl rollout status deployment/ai-service -n eduai-staging --timeout=300s
+
+  # Deploy to Production Job
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-images
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'v1.28.0'
+        
+    - name: Configure kubectl
+      run: |
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
+        export KUBECONFIG=kubeconfig
+        
+    - name: Deploy to production
+      run: |
+        export KUBECONFIG=kubeconfig
+        
+        # Apply manifests
+        kubectl apply -f k8s/ -n eduai
+        
+        # Wait for rollout
+        kubectl rollout status deployment/frontend -n eduai --timeout=600s
+        kubectl rollout status deployment/backend -n eduai --timeout=600s
+        kubectl rollout status deployment/ai-service -n eduai --timeout=600s
+        
+    - name: Verify deployment
+      run: |
+        export KUBECONFIG=kubeconfig
+        
+        # Check pod status
+        kubectl get pods -n eduai
+        kubectl get services -n eduai
+        
+        # Health checks
+        kubectl wait --for=condition=available deployment/frontend -n eduai --timeout=300s
+        kubectl wait --for=condition=available deployment/backend -n eduai --timeout=300s
+        kubectl wait --for=condition=available deployment/ai-service -n eduai --timeout=300s
+        
+    - name: Notify deployment
+      uses: 8398a7/action-slack@v3
+      if: always()
+      with:
+        status: ${{ job.status }}
+        channel: '#deployments'
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        text: |
+          🚀 EDUAI Deployment Status: ${{ job.status }}
+          📦 Frontend: ${{ needs.build-images.outputs.frontend-image }}
+          🔧 Backend: ${{ needs.build-images.outputs.backend-image }}
+          🤖 AI Service: ${{ needs.build-images.outputs.ai-image }}
+          🌐 Environment: Production
+          👤 Commit: ${{ github.sha }}
+
+  # Performance Test Job
+  performance-test:
+    name: Performance Test
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup k6
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gpg-agent
+        wget -q -O - https://dl.k6.io/release/key/gpg.key
+        sudo gpg --import gpg.key
+        wget -q -O - https://dl.k6.io/release/k6.deb
+        sudo dpkg -i k6.deb
+        k6 version
+        
+    - name: Run performance tests
+      run: |
+        k6 run --out json --vus 100 --duration 30s tests/performance/load-test.js --env BASE_URL=https://ailearn.duckdns.org
+        
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-results
+        path: performance-results.json
+
+  # Cleanup Job
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    
+    steps:
+    - name: Cleanup old images
+      run: |
+        # Remove old Docker images (keep last 5)
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.ID}}" | \
+        grep -E "(${{ env.FRONTEND_IMAGE }}|${{ env.BACKEND_IMAGE }}|${{ env.AI_IMAGE }})" | \
+        tail -n +6 | \
+        awk '{print $3}' | \
+        xargs -r docker rmi -f 2>/dev/null || true
