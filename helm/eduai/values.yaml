@@ -3,7 +3,7 @@
 # ============================================================
 
 global:
-  imageRegistry: "your-registry.io"
+  imageRegistry: "bayarmaa"
   imagePullSecrets: []
   storageClass: "standard"
 

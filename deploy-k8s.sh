@@ -16,8 +16,8 @@ NC='\033[0m' # No Color
 NAMESPACE="eduai"
 MONITORING_NAMESPACE="monitoring"
 DOMAIN="eduai.yourdomain.com"
-REGISTRY="your-registry"
-DOCKER_HUB_USERNAME="yourusername"
+REGISTRY="bayarmaa"
+DOCKER_HUB_USERNAME="bayarmaa"
 
 # Helper functions
 log_info() {

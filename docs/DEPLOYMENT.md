@@ -96,7 +96,7 @@ helm install redis bitnami/redis \
 helm upgrade --install eduai ./helm/eduai \
   --namespace eduai-production \
   --values helm/production-values.yaml \
-  --set global.imageRegistry="your-registry.io" \
+  --set global.imageRegistry="bayarmaa" \
   --set global.imageTag="v1.0.0" \
   --set ingress.enabled=true \
   --set ingress.host="eduai.yourdomain.com" \
@@ -143,7 +143,7 @@ kubectl create namespace eduai-staging
 helm upgrade --install eduai-staging ./helm/eduai \
   --namespace eduai-staging \
   --values helm/staging-values.yaml \
-  --set global.imageRegistry="your-registry.io" \
+  --set global.imageRegistry="bayarmaa" \
   --set ingress.host="eduai-staging.yourdomain.com"
 ```
 
