@@ -5,6 +5,15 @@ module.exports = {
     es2022: true,
     jest: true
   },
+  globals: {
+    global: 'writable',
+    IntersectionObserver: 'writable',
+    ResizeObserver: 'writable',
+    vi: 'readonly',
+    expect: 'readonly',
+    afterEach: 'readonly',
+    beforeEach: 'readonly'
+  },
   extends: [
     'eslint:recommended',
     '@typescript-eslint/recommended',
@@ -67,9 +76,19 @@ module.exports = {
       env: {
         jest: true
       },
+      globals: {
+        global: 'writable',
+        IntersectionObserver: 'writable',
+        ResizeObserver: 'writable',
+        vi: 'readonly',
+        expect: 'readonly',
+        afterEach: 'readonly',
+        beforeEach: 'readonly'
+      },
       rules: {
         'no-unused-expressions': 'off',
-        'no-console': 'off'
+        'no-console': 'off',
+        'no-undef': 'off'
       }
     }
   ]
