@@ -6,7 +6,7 @@
 # Features
 # - Auto Minikube cluster setup
 # - Docker build & push with BuildKit
-# - Kubernetes deployment using existing manifests
+# - Kubernetes deployment with HPA
 # - Production monitoring stack
 # - TLS with cert-manager
 # - Centralized logging
@@ -80,7 +80,7 @@ show_banner() {
     ____        __          __   _                 
    / __ \____  / /_  ____ _ / /  (_)___  ____ _ 
   / /_/ / __ \/ __ \/ __ \`// /  / / __ \/ __ \`/
- / ____/ /_/ / / /_/ // /__/ / / / / /_/  
+ / ____/ /_/ / / / /_/ // /__/ / / / / /_/ /  
 /_/    \____/_/ /_/\__,_//____/_/ /_/ /_/\__,_/   
                                                    
     EDUAI - Production DevOps Platform
@@ -248,19 +248,171 @@ deploy_infrastructure() {
     
     # Deploy PostgreSQL
     log "Deploying PostgreSQL..."
-    if [ -f "k8s/postgres-statefulset.yaml" ]; then
-        kubectl apply -f k8s/postgres-statefulset.yaml
-    else
-        fail "PostgreSQL manifest not found: k8s/postgres-statefulset.yaml"
-    fi
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      securityContext:
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        env:
+        - name: POSTGRES_DB
+          value: eduai_db
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: DB_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "eduai_db"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "postgres", "-d", "eduai_db"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+EOF
     
     # Deploy Redis
     log "Deploying Redis..."
-    if [ -f "k8s/redis-deployment.yaml" ]; then
-        kubectl apply -f k8s/redis-deployment.yaml
-    else
-        fail "Redis manifest not found: k8s/redis-deployment.yaml"
-    fi
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      securityContext:
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        command:
+          - redis-server
+          - --requirepass
+          - \$(REDIS_PASSWORD)
+          - --maxmemory
+          - 512mb
+          - --maxmemory-policy
+          - allkeys-lru
+          - --save
+          - "900 1"
+          - --appendonly
+          - "yes"
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: REDIS_PASSWORD
+        ports:
+        - containerPort: 6379
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+        livenessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+EOF
     
     success "Infrastructure deployed"
 }
@@ -274,27 +426,289 @@ deploy_applications() {
     
     # Deploy Backend
     log "Deploying Backend API..."
-    if [ -f "k8s/backend-deployment.yaml" ]; then
-        kubectl apply -f k8s/backend-deployment.yaml
-    else
-        fail "Backend manifest not found: k8s/backend-deployment.yaml"
-    fi
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+    version: "1.0.0"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: backend
+        image: $BACKEND_IMAGE
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: eduai-config
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: DB_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: JWT_SECRET
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: REDIS_PASSWORD
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: $NAMESPACE
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 5000
+    targetPort: 5000
+    name: http
+  type: ClusterIP
+EOF
     
     # Deploy AI Service
     log "Deploying AI Service..."
-    if [ -f "k8s/ai-service-deployment.yaml" ]; then
-        kubectl apply -f k8s/ai-service-deployment.yaml
-    else
-        fail "AI Service manifest not found: k8s/ai-service-deployment.yaml"
-    fi
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  labels:
+    app: ai-service
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-service
+        version: "1.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: ai-service
+        image: $AI_IMAGE
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: eduai-config
+        env:
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: OPENAI_API_KEY
+        - name: REDIS_URL
+          value: "redis://:$(REDIS_PASSWORD)@redis:6379"
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: eduai-secrets
+              key: REDIS_PASSWORD
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: $NAMESPACE
+  labels:
+    app: ai-service
+spec:
+  selector:
+    app: ai-service
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+EOF
     
     # Deploy Frontend
     log "Deploying Frontend..."
-    if [ -f "k8s/frontend-deployment.yaml" ]; then
-        kubectl apply -f k8s/frontend-deployment.yaml
-    else
-        fail "Frontend manifest not found: k8s/frontend-deployment.yaml"
-    fi
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+      - name: frontend
+        image: $FRONTEND_IMAGE
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
+          limits:
+            cpu: "200m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: $NAMESPACE
+  labels:
+    app: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+EOF
     
     success "Applications deployed"
 }
@@ -307,11 +721,7 @@ configure_autoscaling() {
     step "Configuring Horizontal Pod Autoscaling..."
     
     # Backend HPA
-    if [ -f "k8s/hpa.yml" ]; then
-        kubectl apply -f k8s/hpa.yml
-    else
-        log "HPA manifest not found, creating minimal HPA..."
-        kubectl apply -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -338,7 +748,29 @@ spec:
         type: Utilization
         averageUtilization: 80
 EOF
-    fi
+    
+    # AI Service HPA
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-service-hpa
+  namespace: $NAMESPACE
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+EOF
     
     success "Autoscaling configured"
 }
@@ -377,25 +809,125 @@ install_ingress_tls() {
     
     # Create Cluster Issuer
     log "Creating Let's Encrypt Cluster Issuer..."
-    kubectl apply -f k8s/cert-manager.yaml
+    kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@$DOMAIN
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+EOF
     
-    # Create Secrets and ConfigMaps
-    log "Creating application secrets and configmaps..."
-    if [ -f "k8s/eduai-secrets.yaml" ]; then
-        kubectl apply -f k8s/eduai-secrets.yaml
-    fi
+    # Create Secrets
+    log "Creating application secrets..."
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: eduai-secrets
+  namespace: $NAMESPACE
+type: Opaque
+data:
+  DB_PASSWORD: ZWR1YWlfZGIxMjM=
+  REDIS_PASSWORD: cmVkaXMxMjM=
+  JWT_SECRET: bXlzZWNyZXRrZXkxMjM=
+  JWT_REFRESH_SECRET: bXlzZWNyZXRrZXlyZWZyZXNoMTIz
+  OPENAI_API_KEY: c2stcHJvamVjdDEyMw==
+  AI_SERVICE_API_KEY: YWktc2VydmljZS1rZXkxMjM=
+EOF
     
-    if [ -f "k8s/configmap.yaml" ]; then
-        kubectl apply -f k8s/configmap.yaml
-    fi
+    # Create ConfigMap
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: eduai-config
+  namespace: $NAMESPACE
+data:
+  NODE_ENV: "production"
+  PORT: "5000"
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "eduai_db"
+  DB_USER: "postgres"
+  REDIS_URL: "redis://redis:6379"
+  AI_SERVICE_URL: "http://ai-service:8000"
+  LOG_LEVEL: "info"
+  ALLOWED_ORIGINS: "https://$DOMAIN"
+EOF
     
     # Create Ingress
     log "Creating Ingress with TLS..."
-    if [ -f "k8s/ingress.yml" ]; then
-        kubectl apply -f k8s/ingress.yml
-    else
-        fail "Ingress manifest not found: k8s/ingress.yml"
-    fi
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: eduai-ingress
+  namespace: $NAMESPACE
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://$DOMAIN"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: SAMEORIGIN";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+spec:
+  tls:
+    - hosts:
+        - $DOMAIN
+      secretName: eduai-tls
+  rules:
+    - host: $DOMAIN
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5000
+          - path: /ai/
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-service
+                port:
+                  number: 8000
+          - path: /socket.io/
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+EOF
     
     success "Ingress and TLS configured"
 }
@@ -466,12 +998,79 @@ install_logging() {
 configure_security() {
     step "Configuring network security policies..."
     
-    # Apply network policies
-    if [ -f "k8s/network-policy.yaml" ]; then
-        kubectl apply -f k8s/network-policy.yaml
-    else
-        log "Network policy manifest not found, skipping..."
-    fi
+    # Default deny policy
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: $NAMESPACE
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+EOF
+    
+    # Allow specific traffic
+    kubectl apply -n $NAMESPACE -f - <<EOF
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: eduai-network-policy
+  namespace: $NAMESPACE
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app: frontend
+    - podSelector:
+        matchLabels:
+          app: backend
+    - podSelector:
+        matchLabels:
+          app: ai-service
+  - ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5000
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 5432
+    - protocol: TCP
+      port: 6379
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgres
+    - podSelector:
+        matchLabels:
+          app: redis
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 53
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 80
+EOF
     
     success "Network security policies configured"
 }
@@ -545,9 +1144,6 @@ show_access_info() {
     echo -e "   $BACKEND_IMAGE"
     echo -e "   $AI_IMAGE"
     
-    echo -e "\n${CYAN}🔧 Minikube Dashboard:${NC}"
-    echo -e "   minikube dashboard -p $CLUSTER_NAME"
-    
     echo -e "\n${GREEN}✨ EDUAI Platform is ready for production use! ✨${NC}\n"
 }
 
@@ -585,7 +1181,6 @@ show_help() {
     echo "  build      - Build Docker images only"
     echo "  push       - Push images to Docker Hub only"
     echo "  monitor    - Install monitoring stack only"
-    echo "  logging    - Install logging stack only"
     echo "  verify     - Verify deployment status"
     echo "  cleanup    - Delete all deployed resources"
     echo "  help       - Show this help message"
@@ -636,10 +1231,6 @@ main() {
         "monitor")
             check_dependencies
             install_monitoring
-            ;;
-        "logging")
-            check_dependencies
-            install_logging
             ;;
         "verify")
             check_dependencies

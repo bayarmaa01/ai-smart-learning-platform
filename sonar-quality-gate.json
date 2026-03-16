@@ -1,0 +1,77 @@
+{
+  "name": "EDUAI Quality Gate",
+  "projectKey": "bayarmaa01_ai-smart-learning-platform",
+  "organization": "bayarmaa01",
+  "conditions": [
+    {
+      "metric": "coverage",
+      "operator": "LT",
+      "threshold": "80.0",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "duplicated_lines_density",
+      "operator": "GT",
+      "threshold": "3.0",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "maintainability_rating",
+      "operator": "LT",
+      "threshold": "A",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "reliability_rating",
+      "operator": "LT",
+      "threshold": "A",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "security_rating",
+      "operator": "LT",
+      "threshold": "A",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "sqale_rating",
+      "operator": "GT",
+      "threshold": "1.0",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "sqale_index",
+      "operator": "GT",
+      "threshold": "10.0",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "test_success_density",
+      "operator": "GT",
+      "threshold": "80.0",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "test_errors",
+      "operator": "GT",
+      "threshold": "0",
+      "status": "ERROR",
+      "actual": null
+    },
+    {
+      "metric": "test_failures",
+      "operator": "GT",
+      "threshold": "0",
+      "status": "ERROR",
+      "actual": null
+    }
+  ]
+}
