@@ -11,7 +11,7 @@ afterEach(() => {
   cleanup()
 })
 
-// Mock IntersectionObserver
+// Define global test environment
 global.IntersectionObserver = class IntersectionObserver {
   constructor() {}
   disconnect() {}
@@ -19,7 +19,6 @@ global.IntersectionObserver = class IntersectionObserver {
   unobserve() {}
 }
 
-// Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
   constructor() {}
   disconnect() {}
