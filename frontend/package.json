@@ -13,9 +13,7 @@
     "test:watch": "vitest",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "lint:check": "eslint src --max-warnings=0",
-    "prepare": "husky install",
-    "precommit": "lint-staged"
+    "lint:check": "eslint src --max-warnings=0"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.2.1",
