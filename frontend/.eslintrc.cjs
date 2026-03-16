@@ -15,12 +15,8 @@ module.exports = {
     beforeEach: 'readonly'
   },
   extends: [
-    'eslint:recommended',
-    '@typescript-eslint/recommended',
-    'plugin:react/recommended',
-    'plugin:react-hooks/recommended'
+    'eslint:recommended'
   ],
-  parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 'latest',
     sourceType: 'module',
@@ -30,16 +26,13 @@ module.exports = {
   },
   plugins: [
     'react',
-    'react-hooks',
-    '@typescript-eslint'
+    'react-hooks'
   ],
   rules: {
     // React specific rules
     'react/react-in-jsx-scope': 'error',
     'react/prop-types': 'warn',
     'react/jsx-uses-react': 'error',
-    'react/jsx-uses-react': 'error',
-    'react/jsx-uses-react-1': 'error',
     'react/jsx-key': 'error',
     'react/no-children-prop': 'error',
     'react/no-array-index-key': 'error',
@@ -88,8 +81,7 @@ module.exports = {
       rules: {
         'no-unused-expressions': 'off',
         'no-console': 'off',
-        'no-undef': 'off',
-        'no-global-assignments': 'off'
+        'no-undef': 'off'
       }
     }
   ]
