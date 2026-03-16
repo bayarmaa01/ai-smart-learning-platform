@@ -12,6 +12,7 @@ export const loginUser = createAsyncThunk(
       localStorage.setItem('refreshToken', refreshToken);
       return user;
     } catch (err) {
+      // eslint-disable-next-line no-unused-vars
       return rejectWithValue(err.response?.data?.message || 'Login failed');
     }
   }

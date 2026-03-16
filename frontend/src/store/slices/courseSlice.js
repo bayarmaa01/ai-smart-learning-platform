@@ -110,6 +110,7 @@ const courseSlice = createSlice({
         if (state.currentCourse) {
           state.currentCourse.isEnrolled = true;
         }
+        // eslint-disable-next-line no-unused-vars
       });
   },
 });
