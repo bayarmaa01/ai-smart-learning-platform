@@ -88,7 +88,8 @@ module.exports = {
       rules: {
         'no-unused-expressions': 'off',
         'no-console': 'off',
-        'no-undef': 'off'
+        'no-undef': 'off',
+        'no-global-assignments': 'off'
       }
     }
   ]
