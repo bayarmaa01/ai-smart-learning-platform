@@ -36,8 +36,20 @@ router.post('/subscribe', verifyToken, async (req, res) => {
     return res.status(404).json({ success: false, error: { message: 'Plan not found' } });
   }
 
-  const plan = planResult.rows[0];
-  const price = billingCycle === 'yearly' ? plan.price_yearly : plan.price_monthly;
+  const periodEnd = new Date();
+  periodEnd.setMonth(periodEnd.getMonth() + (billingCycle === 'yearly' ? 12 : 1));
+
+  const result = await query(
+    `INSERT INTO subscriptions (user_id, plan_id, billing_cycle, current_period_start, current_period_end, tenant_id)
+     VALUES ($1, $2, $3, NOW(), $4, $5) RETURNING *`,
+    [req.user.id, planId, billingCycle, periodEnd, req.tenantId]
+  );
+
+  res.status(201).json({ success: true, subscription: result.rows[0] });
+});
+
+router.delete('/cancel', verifyToken, async (req, res) => {
+  const billingCycle = req.body.billing_cycle || 'monthly';
   const periodEnd = new Date();
   periodEnd.setMonth(periodEnd.getMonth() + (billingCycle === 'yearly' ? 12 : 1));
 
@@ -47,13 +59,7 @@ router.post('/subscribe', verifyToken, async (req, res) => {
     [req.user.id]
   );
 
-  const result = await query(
-    `INSERT INTO subscriptions (user_id, plan_id, billing_cycle, current_period_start, current_period_end, tenant_id)
-     VALUES ($1, $2, $3, NOW(), $4, $5) RETURNING *`,
-    [req.user.id, planId, billingCycle, periodEnd, req.tenantId]
-  );
-
-  res.status(201).json({ success: true, subscription: result.rows[0] });
+  res.json({ success: true, message: 'Subscription cancelled successfully' });
 });
 
 module.exports = router;

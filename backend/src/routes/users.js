@@ -184,7 +184,7 @@ router.get('/certificates/:id/download', verifyToken, async (req, res) => {
 });
 
 router.post('/placement-result', verifyToken, async (req, res) => {
-  const { level, score, total, percentage } = req.body;
+  const { level } = req.body;
   await query(
     `UPDATE users SET placement_level = $1, updated_at = NOW() WHERE id = $2`,
     [level, req.user.id]
@@ -198,7 +198,6 @@ router.patch('/notification-preferences', verifyToken, async (req, res) => {
 });
 
 router.post('/courses/:courseId/notes', verifyToken, async (req, res) => {
-  const { lessonId, content } = req.body;
   res.json({ success: true, message: 'Note saved' });
 });
 

@@ -113,8 +113,6 @@ router.get('/analytics/user-growth', async (req, res) => {
 });
 
 router.get('/health', async (req, res) => {
-  const { connectDB } = require('../db/connection');
-  const { connectRedis } = require('../cache/redis');
   const axios = require('axios');
 
   const services = [];

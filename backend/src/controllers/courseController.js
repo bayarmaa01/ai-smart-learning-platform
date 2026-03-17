@@ -1,7 +1,6 @@
 const { query, transaction } = require('../db/connection');
-const { getCache, setCache, deleteCache, deleteCachePattern } = require('../cache/redis');
+const { getCache, setCache, deleteCachePattern } = require('../cache/redis');
 const { AppError } = require('../middleware/errorHandler');
-const { v4: uuidv4 } = require('uuid');
 
 const getCourses = async (req, res) => {
   const {

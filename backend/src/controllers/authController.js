@@ -1,8 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
-const { query, transaction } = require('../db/connection');
+const { query } = require('../db/connection');
 const { setCache, deleteCache, getCache, incrementCounter } = require('../cache/redis');
 const { AppError } = require('../middleware/errorHandler');
 const { logger } = require('../utils/logger');
@@ -193,9 +192,8 @@ const refreshToken = async (req, res) => {
     throw new AppError('Refresh token required', 400, 'TOKEN_REQUIRED');
   }
 
-  let decoded;
   try {
-    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+    jwt.verify(token, process.env.JWT_REFRESH_SECRET);
   } catch {
     throw new AppError('Invalid or expired refresh token', 401, 'INVALID_REFRESH_TOKEN');
   }

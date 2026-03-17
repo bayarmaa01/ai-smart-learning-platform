@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { connectDB, query, getClient } = require('./connection');
+const { query, getClient } = require('./connection');
 const { logger } = require('../utils/logger');
 
 class DatabaseInitializer {
