@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="5" failures="0" errors="0" time="9.671">
+    <testsuite name="src/App.test.jsx" timestamp="2026-03-17T09:57:26.642Z" hostname="DESKTOP-GM34CVT" tests="2" failures="0" errors="0" skipped="0" time="0.178">
+        <testcase classname="src/App.test.jsx" name="App Component &gt; renders without crashing" time="0.156">
+        </testcase>
+        <testcase classname="src/App.test.jsx" name="App Component &gt; renders basic structure" time="0.013">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/test/basic.test.js" timestamp="2026-03-17T09:57:26.666Z" hostname="DESKTOP-GM34CVT" tests="3" failures="0" errors="0" skipped="0" time="0.019">
+        <testcase classname="src/test/basic.test.js" name="Basic Tests &gt; should pass basic math test" time="0.009">
+        </testcase>
+        <testcase classname="src/test/basic.test.js" name="Basic Tests &gt; should handle string operations" time="0.002">
+        </testcase>
+        <testcase classname="src/test/basic.test.js" name="Basic Tests &gt; should handle array operations" time="0.001">
+        </testcase>
+    </testsuite>
+</testsuites>

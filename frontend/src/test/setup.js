@@ -1,30 +1,23 @@
-import '@testing-library/jest-dom'
-import { expect, afterEach, vi } from 'vitest'
-import { cleanup } from '@testing-library/react'
-import * as matchers from '@testing-library/jest-dom/matchers'
+// Simple Vitest setup
+import { vi, expect } from 'vitest'
+import * as matchers from '@testing-library/jest-dom'
 
-// Extend Vitest's expect
+// Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers)
 
-// Cleanup after each test
-afterEach(() => {
-  cleanup()
-})
+// Mock IntersectionObserver
+global.IntersectionObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn()
+}))
 
-// Define global test environment
-global.IntersectionObserver = class IntersectionObserver {
-  constructor() {}
-  disconnect() {}
-  observe() {}
-  unobserve() {}
-}
-
-global.ResizeObserver = class ResizeObserver {
-  constructor() {}
-  disconnect() {}
-  observe() {}
-  unobserve() {}
-}
+// Mock ResizeObserver
+global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  observe: vi.fn(),
+  unobserve: vi.fn(),
+  disconnect: vi.fn()
+}))
 
 // Mock matchMedia
 Object.defineProperty(window, 'matchMedia', {

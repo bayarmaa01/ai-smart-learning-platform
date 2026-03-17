@@ -7,17 +7,14 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./src/test/setup-simple.js'],
+    include: ['src/**/*.{test,spec}.{js,jsx,ts,tsx}'],
+    setupFiles: ['./src/test/setup.js'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'lcov'],
       exclude: [
         'node_modules/',
         'src/test/',
-        '**/*.test.js',
-        '**/*.test.jsx',
-        '**/*.test.ts',
-        '**/*.test.tsx',
         'postcss.config.js',
         'tailwind.config.js',
         '.eslintrc.cjs',
