@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="0" errors="0" time="4.245">
+    <testsuite name="src/test/example.test.js" timestamp="2026-03-17T09:38:46.260Z" hostname="DESKTOP-GM34CVT" tests="2" failures="0" errors="0" skipped="0" time="0.057">
+        <testcase classname="src/test/example.test.js" name="Example Test &gt; should pass" time="0.003">
+        </testcase>
+        <testcase classname="src/test/example.test.js" name="Example Test &gt; should handle DOM elements" time="0.051">
+        </testcase>
+    </testsuite>
+</testsuites>
