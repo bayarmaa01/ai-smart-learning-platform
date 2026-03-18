@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../server');
+const { app } = require('../server');
 const { query } = require('../db/connection');
 const redisClient = require('../cache/redis');
 
