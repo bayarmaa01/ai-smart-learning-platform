@@ -52,9 +52,10 @@ class TestRecommendationsEndpoint:
         for rec in data["recommendations"]:
             assert "id" in rec
             assert "title" in rec
-            assert "description" in rec
+            assert "instructor" in rec
             assert "level" in rec
             assert "score" in rec
+            assert "reason" in rec
 
     def test_recommendations_default_language(self):
         response = client.get("/recommendations/test-user-123")

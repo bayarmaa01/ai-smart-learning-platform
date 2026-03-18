@@ -112,8 +112,7 @@ class TestChatEndpoint:
         with patch("app.services.chat_service.ChatService.clear_history") as mock:
             mock.return_value = True
             response = client.delete(
-                "/chat/history/test-user-123",
-                params={"session_id": "test-session-456"},
+                "/chat/test-session-456",
             )
             assert response.status_code == 200
 
