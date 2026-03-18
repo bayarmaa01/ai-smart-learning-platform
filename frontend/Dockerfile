@@ -1,11 +1,14 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
+# Set Node.js memory limit for stability
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci --only=production=false
+RUN npm ci
 
 # Copy source and build
 COPY . .

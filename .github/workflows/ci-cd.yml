@@ -200,7 +200,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./frontend
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
         labels: ${{ steps.meta.outputs.labels.frontend }}
@@ -212,7 +212,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./backend
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
         labels: ${{ steps.meta.outputs.labels.backend }}
@@ -224,7 +224,7 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: ./ai-service
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64
         push: true
         tags: ${{ env.REGISTRY }}/${{ env.AI_IMAGE }}:${{ github.sha }}
         labels: ${{ steps.meta.outputs.labels.ai }}
