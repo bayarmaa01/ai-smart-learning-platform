@@ -7,10 +7,11 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: docker.io/bayarmaa
-  FRONTEND_IMAGE: bayarmaa/eduai-frontend
-  BACKEND_IMAGE: bayarmaa/eduai-backend
-  AI_IMAGE: bayarmaa/eduai-ai-service
+  IMAGE_PREFIX: ${{ secrets.DOCKER_USERNAME }}/eduai
+  IMAGE_TAG: ${{ github.sha }}
+  FRONTEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/eduai-frontend
+  BACKEND_IMAGE: ${{ secrets.DOCKER_USERNAME }}/eduai-backend
+  AI_IMAGE: ${{ secrets.DOCKER_USERNAME }}/eduai-ai-service
   SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
 jobs:
@@ -183,16 +184,18 @@ jobs:
         password: ${{ secrets.DOCKER_PASSWORD }}
         logout: false
         
-    - name: Debug Docker authentication
+    - name: Verify Docker authentication
       run: |
+        echo "Verifying Docker authentication..."
         docker info
-        echo "Docker login status:"
-        docker pull hello-world || echo "Pull failed - not logged in"
+        echo "Testing pull permissions..."
+        docker pull hello-world
         echo "Testing push permissions..."
         docker pull alpine:latest
-        docker tag alpine:latest ${{ env.FRONTEND_IMAGE }}:test
-        docker push ${{ env.FRONTEND_IMAGE }}:test || echo "Push test failed"
-        docker rmi ${{ env.FRONTEND_IMAGE }}:test || echo "Cleanup failed"
+        docker tag alpine:latest ${{ env.FRONTEND_IMAGE }}:test-auth
+        docker push ${{ env.FRONTEND_IMAGE }}:test-auth
+        docker rmi ${{ env.FRONTEND_IMAGE }}:test-auth alpine:latest
+        echo "✅ Docker authentication verified successfully!"
         
     - name: Extract metadata
       id: meta
@@ -215,7 +218,7 @@ jobs:
         context: ./frontend
         platforms: linux/amd64
         push: true
-        tags: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+        tags: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}
         labels: ${{ steps.meta.outputs.labels.frontend }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -227,7 +230,7 @@ jobs:
         context: ./backend
         platforms: linux/amd64
         push: true
-        tags: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+        tags: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}
         labels: ${{ steps.meta.outputs.labels.backend }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -239,7 +242,7 @@ jobs:
         context: ./ai-service
         platforms: linux/amd64
         push: true
-        tags: ${{ env.AI_IMAGE }}:${{ github.sha }}
+        tags: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}
         labels: ${{ steps.meta.outputs.labels.ai }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -257,27 +260,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
-        
-    - name: Configure kubectl
+    - name: Update Helm values for staging
       run: |
-        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
-        export KUBECONFIG=kubeconfig
+        # Update Helm values.yaml with new image tags
+        sed -i "s|frontend:.*|frontend: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
+        sed -i "s|backend:.*|backend: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
+        sed -i "s|aiService:.*|aiService: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
+        sed -i "s|environment:.*|environment: staging|g" helm/values.yaml
         
-    - name: Deploy to staging
-      run: |
-        export KUBECONFIG=kubeconfig
-        
-        # Apply manifests
-        kubectl apply -f k8s/ -n eduai-staging
-        
-        # Wait for rollout
-        kubectl rollout status deployment/frontend -n eduai-staging --timeout=300s
-        kubectl rollout status deployment/backend -n eduai-staging --timeout=300s
-        kubectl rollout status deployment/ai-service -n eduai-staging --timeout=300s
+        # Commit and push Helm values update
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add helm/values.yaml
+        git diff --staged --quiet || git commit -m "chore: Update staging images to ${{ env.IMAGE_TAG }}"
+        git push
 
   # Deploy to Production Job
   deploy-production:
@@ -292,56 +288,20 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.28.0'
-        
-    - name: Configure kubectl
+    - name: Update Helm values for production
       run: |
-        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
-        export KUBECONFIG=kubeconfig
+        # Update Helm values.yaml with new image tags
+        sed -i "s|frontend:.*|frontend: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
+        sed -i "s|backend:.*|backend: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
+        sed -i "s|aiService:.*|aiService: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
+        sed -i "s|environment:.*|environment: production|g" helm/values.yaml
         
-    - name: Deploy to production
-      run: |
-        export KUBECONFIG=kubeconfig
-        
-        # Apply manifests
-        kubectl apply -f k8s/ -n eduai
-        
-        # Wait for rollout
-        kubectl rollout status deployment/frontend -n eduai --timeout=600s
-        kubectl rollout status deployment/backend -n eduai --timeout=600s
-        kubectl rollout status deployment/ai-service -n eduai --timeout=600s
-        
-    - name: Verify deployment
-      run: |
-        export KUBECONFIG=kubeconfig
-        
-        # Check pod status
-        kubectl get pods -n eduai
-        kubectl get services -n eduai
-        
-        # Health checks
-        kubectl wait --for=condition=available deployment/frontend -n eduai --timeout=300s
-        kubectl wait --for=condition=available deployment/backend -n eduai --timeout=300s
-        kubectl wait --for=condition=available deployment/ai-service -n eduai --timeout=300s
-        
-    - name: Notify deployment
-      uses: rtCamp/action-slack-notify@v2
-      if: always()
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-      with:
-        status: ${{ job.status }}
-        channel: '#deployments'
-        text: |
-          🚀 EDUAI Deployment Status: ${{ job.status }}
-          📦 Frontend: ${{ needs.build-images.outputs.frontend-image }}
-          🔧 Backend: ${{ needs.build-images.outputs.backend-image }}
-          🤖 AI Service: ${{ needs.build-images.outputs.ai-image }}
-          🌐 Environment: Production
-          👤 Commit: ${{ github.sha }}
+        # Commit and push Helm values update
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add helm/values.yaml
+        git diff --staged --quiet || git commit -m "chore: Update production images to ${{ env.IMAGE_TAG }}"
+        git push
 
   # Performance Test Job
   performance-test:
