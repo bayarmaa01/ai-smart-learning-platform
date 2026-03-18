@@ -46,7 +46,9 @@ async def set_cache(key: str, value: Any, ttl: int = None) -> bool:
     if not redis_client:
         return False
     try:
-        await redis_client.setex(key, ttl or settings.REDIS_TTL, json.dumps(value))
+        await redis_client.setex(
+            key, ttl or settings.REDIS_TTL, json.dumps(value)
+        )
         return True
     except Exception as e:
         logger.error(f"Redis SET error: {e}")

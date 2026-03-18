@@ -50,13 +50,17 @@ app.add_middleware(
 )
 
 if not settings.DEBUG:
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+    app.add_middleware(
+        TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS
+    )
 
 Instrumentator().instrument(app).expose(app)
 
 app.include_router(health.router, tags=["health"])
 app.include_router(chat.router, prefix="/chat", tags=["chat"])
-app.include_router(recommendations.router, prefix="/recommendations", tags=["recommendations"])
+app.include_router(
+    recommendations.router, prefix="/recommendations", tags=["recommendations"]
+)
 
 
 @app.exception_handler(Exception)
@@ -64,12 +68,16 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error", "type": type(exc).__name__},
+        content={
+            "detail": "Internal server error",
+            "type": type(exc).__name__,
+        },
     )
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

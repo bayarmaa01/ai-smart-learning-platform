@@ -4,7 +4,7 @@ Automatically selects provider based on configuration
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from app.core.config import settings
@@ -31,10 +31,14 @@ class LLMResponse:
 class OpenAIProvider:
     def __init__(self):
         from openai import AsyncOpenAI
+
         self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = settings.OPENAI_MODEL
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
     async def generate(
         self,
         messages: List[LLMMessage],
@@ -62,10 +66,16 @@ class OpenAIProvider:
 class AnthropicProvider:
     def __init__(self):
         import anthropic
-        self.client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+        self.client = anthropic.AsyncAnthropic(
+            api_key=settings.ANTHROPIC_API_KEY
+        )
         self.model = settings.ANTHROPIC_MODEL
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+    )
     async def generate(
         self,
         messages: List[LLMMessage],
@@ -82,7 +92,8 @@ class AnthropicProvider:
 
         return LLMResponse(
             content=response.content[0].text,
-            tokens_used=response.usage.input_tokens + response.usage.output_tokens,
+            tokens_used=response.usage.input_tokens
+            + response.usage.output_tokens,
             model=self.model,
         )
 
@@ -92,6 +103,7 @@ class OllamaProvider:
 
     def __init__(self):
         import httpx
+
         self.base_url = settings.OLLAMA_BASE_URL
         self.model = settings.OLLAMA_MODEL
         self.client = httpx.AsyncClient(timeout=60.0)
@@ -112,7 +124,10 @@ class OllamaProvider:
                 "model": self.model,
                 "messages": all_messages,
                 "stream": False,
-                "options": {"temperature": temperature, "num_predict": max_tokens},
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                },
             },
         )
         response.raise_for_status()
@@ -130,6 +145,7 @@ class HuggingFaceProvider:
 
     def __init__(self):
         import httpx
+
         self.base_url = settings.HUGGINGFACE_BASE_URL
         self.model = settings.HUGGINGFACE_MODEL
         self.api_key = settings.HUGGINGFACE_API_KEY
@@ -144,7 +160,7 @@ class HuggingFaceProvider:
     ) -> LLMResponse:
         # For Hugging Face, we'll use a simpler approach
         last_message = messages[-1].content if messages else ""
-        
+
         headers = {}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -159,23 +175,27 @@ class HuggingFaceProvider:
                         "max_new_tokens": max_tokens,
                         "temperature": temperature,
                         "return_full_text": False,
-                    }
+                    },
                 },
-                headers=headers
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()
-            
+
             if isinstance(data, list) and len(data) > 0:
                 content = data[0].get("generated_text", "")
             else:
                 content = data.get("generated_text", "")
-                
-            return LLMResponse(content=content, tokens_used=100, model=self.model)
+
+            return LLMResponse(
+                content=content, tokens_used=100, model=self.model
+            )
         except Exception as e:
             logger.error(f"Hugging Face API error: {e}")
             # Fallback to mock response
-            return await MockProvider().generate(messages, system_prompt, max_tokens, temperature)
+            return await MockProvider().generate(
+                messages, system_prompt, max_tokens, temperature
+            )
 
 
 class MockProvider:
@@ -247,9 +267,11 @@ def get_provider():
 
 class LLMService:
     """Service class for LLM operations."""
-    
+
     @staticmethod
-    async def generate_response(messages: List[LLMMessage], system_prompt: str = "", **kwargs) -> str:
+    async def generate_response(
+        messages: List[LLMMessage], system_prompt: str = "", **kwargs
+    ) -> str:
         """Generate a response using the LLM provider."""
         provider = get_provider()
         response = await provider.generate(messages, system_prompt, **kwargs)

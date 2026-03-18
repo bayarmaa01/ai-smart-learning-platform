@@ -24,7 +24,9 @@ def mock_redis():
 
 @pytest.fixture(autouse=True)
 def mock_llm():
-    with patch("app.services.llm_service.LLMService.generate_response") as mock:
+    with patch(
+        "app.services.llm_service.LLMService.generate_response"
+    ) as mock:
         mock.return_value = "This is a test AI response."
         yield mock
 
@@ -90,7 +92,9 @@ class TestChatEndpoint:
         assert response.status_code == 422
 
     def test_get_chat_history(self):
-        with patch("app.services.chat_service.ChatService.get_history") as mock:
+        with patch(
+            "app.services.chat_service.ChatService.get_history"
+        ) as mock:
             mock.return_value = [
                 {
                     "role": "user",
@@ -109,7 +113,9 @@ class TestChatEndpoint:
             assert isinstance(data["messages"], list)
 
     def test_clear_chat_history(self):
-        with patch("app.services.chat_service.ChatService.clear_history") as mock:
+        with patch(
+            "app.services.chat_service.ChatService.clear_history"
+        ) as mock:
             mock.return_value = True
             response = client.delete(
                 "/chat/test-session-456",

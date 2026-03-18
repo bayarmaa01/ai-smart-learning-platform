@@ -3,7 +3,10 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 
 from app.services.recommendation_service import get_recommendations
-from app.services.learning_path_service import get_learning_path, get_skill_assessment
+from app.services.learning_path_service import (
+    get_learning_path,
+    get_skill_assessment,
+)
 
 router = APIRouter()
 
@@ -61,7 +64,7 @@ async def learning_path(request: LearningPathRequest):
         current_level=request.current_level,
         language_preference=request.language_preference,
         time_commitment=request.time_commitment,
-        focus_areas=request.focus_areas
+        focus_areas=request.focus_areas,
     )
     return {"learning_path": path}
 
@@ -72,6 +75,6 @@ async def skill_assessment(request: SkillAssessmentRequest):
     assessment = get_skill_assessment(
         user_skills=request.user_skills,
         target_role=request.target_role,
-        language=request.language
+        language=request.language,
     )
     return {"assessment": assessment}

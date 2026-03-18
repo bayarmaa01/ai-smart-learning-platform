@@ -39,8 +39,7 @@ async def chat(request: ChatRequest, http_request: Request):
     count = await increment_counter(rate_key, 60)
     if count > settings.RATE_LIMIT_PER_MINUTE:
         raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded. Please slow down."
+            status_code=429, detail="Rate limit exceeded. Please slow down."
         )
 
     result = await process_chat(
@@ -57,6 +56,7 @@ async def chat(request: ChatRequest, http_request: Request):
 async def get_history(session_id: str):
     """Get chat history for a session."""
     from app.services.chat_service import get_conversation_history
+
     history = await get_conversation_history(session_id)
     return {"session_id": session_id, "messages": history}
 
@@ -65,5 +65,6 @@ async def get_history(session_id: str):
 async def clear_session(session_id: str):
     """Clear chat history for a session."""
     from app.core.redis_client import delete_cache
+
     await delete_cache(f"chat:history:{session_id}")
     return {"message": "Session cleared", "session_id": session_id}

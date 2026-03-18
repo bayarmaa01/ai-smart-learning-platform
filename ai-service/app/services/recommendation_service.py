@@ -4,12 +4,14 @@ Uses collaborative filtering + content-based filtering based on real user data.
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
 
-def compute_similarity(user_categories: List[str], course_categories: List[str]) -> float:
+def compute_similarity(
+    user_categories: List[str], course_categories: List[str]
+) -> float:
     """Jaccard similarity for category matching."""
     if not user_categories or not course_categories:
         return 0.0
@@ -22,7 +24,7 @@ def compute_similarity(user_categories: List[str], course_categories: List[str])
 
 def get_level_score(user_level: str, course_level: str) -> float:
     """Score based on appropriate difficulty level."""
-    levels = {'beginner': 0, 'intermediate': 1, 'advanced': 2}
+    levels = {"beginner": 0, "intermediate": 1, "advanced": 2}
     user_l = levels.get(user_level.lower(), 0)
     course_l = levels.get(course_level.lower(), 0)
     diff = abs(user_l - course_l)
@@ -32,42 +34,48 @@ def get_level_score(user_level: str, course_level: str) -> float:
 def determine_user_level(enrolled_courses: List[Dict]) -> str:
     """Infer user level from their enrolled courses."""
     if not enrolled_courses:
-        return 'beginner'
-    levels = [c.get('level', 'beginner') for c in enrolled_courses]
-    level_map = {'beginner': 0, 'intermediate': 1, 'advanced': 2}
+        return "beginner"
+    levels = [c.get("level", "beginner") for c in enrolled_courses]
+    level_map = {"beginner": 0, "intermediate": 1, "advanced": 2}
     avg = sum(level_map.get(l, 0) for l in levels) / len(levels)
     if avg >= 1.5:
-        return 'advanced'
+        return "advanced"
     elif avg >= 0.7:
-        return 'intermediate'
-    return 'beginner'
+        return "intermediate"
+    return "beginner"
 
 
 async def get_recommendations(
     user_id: str,
     enrolled_courses: List[Dict],
-    language_preference: str = 'en',
+    language_preference: str = "en",
     limit: int = 6,
 ) -> List[Dict]:
     """
     Generate personalized course recommendations based on user's enrolled courses.
     Scores candidates by category similarity and appropriate difficulty level.
     """
-    is_mn = language_preference == 'mn'
+    is_mn = language_preference == "mn"
 
-    user_categories = list({
-        c.get('category_name', c.get('category_id', ''))
-        for c in enrolled_courses
-        if c.get('category_name') or c.get('category_id')
-    })
-    enrolled_ids = {c.get('id') or c.get('course_id') for c in enrolled_courses}
+    user_categories = list(
+        {
+            c.get("category_name", c.get("category_id", ""))
+            for c in enrolled_courses
+            if c.get("category_name") or c.get("category_id")
+        }
+    )
+    enrolled_ids = {
+        c.get("id") or c.get("course_id") for c in enrolled_courses
+    }
     user_level = determine_user_level(enrolled_courses)
 
     # Candidate pool — in production this would be a DB query for unenrolled courses
     candidate_pool = [
         {
             "id": "rec-1",
-            "title": "Advanced Machine Learning" if not is_mn else "Дэвшилтэт Машин Сургалт",
+            "title": "Advanced Machine Learning"
+            if not is_mn
+            else "Дэвшилтэт Машин Сургалт",
             "instructor": "Dr. Sarah Chen",
             "rating": 4.9,
             "students": 28400,
@@ -79,7 +87,9 @@ async def get_recommendations(
         },
         {
             "id": "rec-2",
-            "title": "Python Data Structures" if not is_mn else "Python Өгөгдлийн Бүтэц",
+            "title": "Python Data Structures"
+            if not is_mn
+            else "Python Өгөгдлийн Бүтэц",
             "instructor": "Emma Wilson",
             "rating": 4.7,
             "students": 45200,
@@ -91,7 +101,9 @@ async def get_recommendations(
         },
         {
             "id": "rec-3",
-            "title": "Cloud Architecture Patterns" if not is_mn else "Клауд Архитектурын Загварууд",
+            "title": "Cloud Architecture Patterns"
+            if not is_mn
+            else "Клауд Архитектурын Загварууд",
             "instructor": "Mike Johnson",
             "rating": 4.8,
             "students": 19800,
@@ -103,7 +115,9 @@ async def get_recommendations(
         },
         {
             "id": "rec-4",
-            "title": "React & TypeScript Mastery" if not is_mn else "React & TypeScript Мэргэшил",
+            "title": "React & TypeScript Mastery"
+            if not is_mn
+            else "React & TypeScript Мэргэшил",
             "instructor": "Alex Turner",
             "rating": 4.8,
             "students": 33100,
@@ -115,7 +129,9 @@ async def get_recommendations(
         },
         {
             "id": "rec-5",
-            "title": "Docker & Kubernetes Complete Guide" if not is_mn else "Docker & Kubernetes Бүрэн Гарын Авлага",
+            "title": "Docker & Kubernetes Complete Guide"
+            if not is_mn
+            else "Docker & Kubernetes Бүрэн Гарын Авлага",
             "instructor": "Lisa Park",
             "rating": 4.9,
             "students": 22700,
@@ -127,7 +143,9 @@ async def get_recommendations(
         },
         {
             "id": "rec-6",
-            "title": "Data Science with Python" if not is_mn else "Python-р Өгөгдлийн Шинжлэх Ухаан",
+            "title": "Data Science with Python"
+            if not is_mn
+            else "Python-р Өгөгдлийн Шинжлэх Ухаан",
             "instructor": "Dr. James Lee",
             "rating": 4.6,
             "students": 51000,
@@ -145,29 +163,39 @@ async def get_recommendations(
     # Score each candidate
     scored = []
     for course in candidates:
-        cat_score = compute_similarity(user_categories, course["categories"]) if user_categories else 0.3
+        cat_score = (
+            compute_similarity(user_categories, course["categories"])
+            if user_categories
+            else 0.3
+        )
         level_score = get_level_score(user_level, course["level"])
-        rating_score = (course["rating"] - 4.0) / 1.0  # normalize 4.0-5.0 to 0-1
+        rating_score = (
+            course["rating"] - 4.0
+        ) / 1.0  # normalize 4.0-5.0 to 0-1
         popularity_score = min(1.0, course["students"] / 50000)
 
         total_score = (
-            cat_score * 0.35 +
-            level_score * 0.30 +
-            rating_score * 0.20 +
-            popularity_score * 0.15
+            cat_score * 0.35
+            + level_score * 0.30
+            + rating_score * 0.20
+            + popularity_score * 0.15
         )
 
-        scored.append({
-            "id": course["id"],
-            "title": course["title"],
-            "instructor": course["instructor"],
-            "rating": course["rating"],
-            "students": course["students"],
-            "price": course["price"],
-            "level": course["level"],
-            "score": round(total_score, 3),
-            "reason": course["reason_mn"] if is_mn else course["reason_en"],
-        })
+        scored.append(
+            {
+                "id": course["id"],
+                "title": course["title"],
+                "instructor": course["instructor"],
+                "rating": course["rating"],
+                "students": course["students"],
+                "price": course["price"],
+                "level": course["level"],
+                "score": round(total_score, 3),
+                "reason": course["reason_mn"]
+                if is_mn
+                else course["reason_en"],
+            }
+        )
 
     # Sort by score descending
     scored.sort(key=lambda x: x["score"], reverse=True)

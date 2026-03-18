@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     WORKERS: int = 4
 
     # Security
-    ALLOWED_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5000"]
+    ALLOWED_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "http://localhost:5000",
+    ]
     ALLOWED_HOSTS: List[str] = ["*"]
     API_KEY: str = ""
 
@@ -23,7 +26,9 @@ class Settings(BaseSettings):
     REDIS_TTL: int = 3600
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/eduai_db"
+    DATABASE_URL: str = (
+        "postgresql://postgres:postgres@localhost:5432/eduai_db"
+    )
 
     # AI Provider (openai | anthropic | ollama | huggingface | mock)
     AI_PROVIDER: str = "mock"
