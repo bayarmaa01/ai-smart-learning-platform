@@ -133,6 +133,7 @@ jobs:
           -Dsonar.python.coverage.reportPaths=ai-service/coverage.xml
           -Dsonar.sources=frontend/,backend/,ai-service/
           -Dsonar.exclusions=**/node_modules/**,**/venv/**,**/__pycache__/**,**/coverage/**,**/dist/**
+          -Dsonar.qualitygate.wait=false
 
   # Security Scan Job
   security-scan:
