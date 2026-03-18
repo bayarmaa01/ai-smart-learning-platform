@@ -35,9 +35,9 @@ def determine_user_level(enrolled_courses: List[Dict]) -> str:
     """Infer user level from their enrolled courses."""
     if not enrolled_courses:
         return "beginner"
-    levels = [c.get("level", "beginner") for c in enrolled_courses]
+    levels = [course.get("level", "beginner") for course in enrolled_courses]
     level_map = {"beginner": 0, "intermediate": 1, "advanced": 2}
-    avg = sum(level_map.get(l, 0) for l in levels) / len(levels)
+    avg = sum(level_map.get(level, 0) for level in levels) / len(levels)
     if avg >= 1.5:
         return "advanced"
     elif avg >= 0.7:

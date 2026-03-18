@@ -2,12 +2,11 @@
 Chat Service - Manages conversation history and AI responses
 """
 
-import json
 import logging
 from typing import List, Optional, Dict
 from datetime import datetime
 
-from app.core.redis_client import delete_cache
+from app.core.redis_client import get_cache, set_cache, delete_cache
 from app.core.config import settings
 from app.services.language_detector import detect_language, get_system_prompt
 from app.services.llm_service import LLMMessage, get_provider
