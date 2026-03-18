@@ -17,14 +17,50 @@ const makeToken = (role = 'student') =>
 describe('Courses API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock tenant resolution
     redisClient.get = jest.fn().mockResolvedValue(null);
     redisClient.set = jest.fn().mockResolvedValue('OK');
-    redisClient.del = jest.fn().mockResolvedValue(1);
+    
+    // Mock tenant query for resolveTenant middleware
+    query.mockImplementation((queryText, params) => {
+      if (queryText.includes('SELECT id, name, slug, settings, subscription_plan, max_users, is_active FROM tenants WHERE id')) {
+        return Promise.resolve({
+          rows: [{
+            id: 'default',
+            name: 'Default Tenant',
+            slug: 'default',
+            settings: {},
+            subscription_plan: 'basic',
+            max_users: 100,
+            is_active: true
+          }]
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    });
   });
 
   describe('GET /api/v1/courses', () => {
     it('should return list of published courses', async () => {
-      query.mockResolvedValueOnce({
+      const mockQuery = jest.fn();
+      query.mockImplementation(mockQuery);
+      
+      // Mock tenant query (first call)
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'default',
+          name: 'Default Tenant',
+          slug: 'default',
+          settings: {},
+          subscription_plan: 'basic',
+          max_users: 100,
+          is_active: true
+        }]
+      });
+      
+      // Mock courses query
+      mockQuery.mockResolvedValueOnce({
         rows: [
           {
             id: 'course-1',
