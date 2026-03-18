@@ -181,12 +181,18 @@ jobs:
         registry: docker.io
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
+        logout: false
         
     - name: Debug Docker authentication
       run: |
         docker info
         echo "Docker login status:"
         docker pull hello-world || echo "Pull failed - not logged in"
+        echo "Testing push permissions..."
+        docker pull alpine:latest
+        docker tag alpine:latest ${{ env.FRONTEND_IMAGE }}:test
+        docker push ${{ env.FRONTEND_IMAGE }}:test || echo "Push test failed"
+        docker rmi ${{ env.FRONTEND_IMAGE }}:test || echo "Cleanup failed"
         
     - name: Extract metadata
       id: meta
