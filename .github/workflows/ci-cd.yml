@@ -202,7 +202,7 @@ jobs:
         context: ./frontend
         platforms: linux/amd64
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+        tags: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
         labels: ${{ steps.meta.outputs.labels.frontend }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -214,7 +214,7 @@ jobs:
         context: ./backend
         platforms: linux/amd64
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+        tags: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
         labels: ${{ steps.meta.outputs.labels.backend }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
@@ -226,7 +226,7 @@ jobs:
         context: ./ai-service
         platforms: linux/amd64
         push: true
-        tags: ${{ env.REGISTRY }}/${{ env.AI_IMAGE }}:${{ github.sha }}
+        tags: ${{ env.AI_IMAGE }}:${{ github.sha }}
         labels: ${{ steps.meta.outputs.labels.ai }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
