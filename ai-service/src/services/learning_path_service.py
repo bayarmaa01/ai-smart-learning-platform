@@ -570,18 +570,6 @@ def get_skill_assessment(
 
     # Assess skills
     user_skills_lower = [skill.lower() for skill in user_skills]
-    required_skills_lower = [
-        skill.lower() for skill in requirements["required_skills"]
-    ]
-    nice_to_have_lower = [
-        skill.lower() for skill in requirements["nice_to_have"]
-    ]
-
-    # Calculate skill match percentage
-    matched_skills = len(
-        set(user_skills_lower) & set(required_skills_lower)
-    )
-    skill_match_ratio = matched_skills / len(required_skills_lower)
 
     # Find skill gaps
     missing_required = [

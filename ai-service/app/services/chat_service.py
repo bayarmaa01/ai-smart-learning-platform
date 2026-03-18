@@ -67,9 +67,14 @@ async def process_chat(
     except Exception as e:
         logger.error(f"LLM generation error: {e}")
         if detected_lang == "mn":
-            ai_content = "Уучлаарай, одоогоор хариулт өгөх боломжгүй байна. Дахин оролдоно уу."
+            ai_content = (
+                "Уучлаарай, одоогоор хариулт өгөх боломжгүй байна. "
+                "Дахин оролдоно уу."
+            )
         else:
-            ai_content = "I apologize, I'm unable to respond right now. Please try again."
+            ai_content = (
+                "I apologize, I'm unable to respond right now. Please try again."
+            )
         tokens_used = 0
 
     history.append(
