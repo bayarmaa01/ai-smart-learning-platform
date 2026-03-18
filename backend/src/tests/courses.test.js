@@ -80,6 +80,7 @@ describe('Courses API', () => {
         .get('/api/v1/courses')
         .set('X-Tenant-ID', 'default');
 
+      console.log('Courses response:', res.status, res.body);
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('courses');
       expect(Array.isArray(res.body.courses)).toBe(true);

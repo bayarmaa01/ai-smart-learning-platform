@@ -72,10 +72,11 @@ describe('Auth API', () => {
         .send({
           email: 'test@example.com',
           password: 'SecurePass123!',
-          first_name: 'Test',
-          last_name: 'User',
+          firstName: 'Test',
+          lastName: 'User',
         });
 
+      console.log('Register response:', res.status, res.body);
       expect(res.status).toBe(201);
       expect(res.body).toHaveProperty('accessToken');
       expect(res.body.user).toHaveProperty('email', 'test@example.com');
@@ -88,8 +89,8 @@ describe('Auth API', () => {
         .send({
           email: 'test@example.com',
           password: '123',
-          first_name: 'Test',
-          last_name: 'User',
+          firstName: 'Test',
+          lastName: 'User',
         });
 
       expect(res.status).toBe(400);
@@ -106,8 +107,8 @@ describe('Auth API', () => {
         .send({
           email: 'existing@example.com',
           password: 'SecurePass123!',
-          first_name: 'Test',
-          last_name: 'User',
+          firstName: 'Test',
+          lastName: 'User',
         });
 
       expect(res.status).toBe(409);
@@ -118,23 +119,38 @@ describe('Auth API', () => {
     it('should login successfully with valid credentials', async () => {
       const bcrypt = require('bcryptjs');
       const hashedPassword = await bcrypt.hash('SecurePass123!', 12);
-
-      query
-        .mockResolvedValueOnce({
-          rows: [{
-            id: 'test-uuid',
-            email: 'test@example.com',
-            password_hash: hashedPassword,
-            first_name: 'Test',
-            last_name: 'User',
-            role: 'student',
-            tenant_id: 'default-tenant',
-            is_active: true,
-            failed_login_attempts: 0,
-            locked_until: null,
-          }],
-        })
-        .mockResolvedValueOnce({ rows: [] });
+      
+      const mockQuery = jest.fn();
+      query.mockImplementation(mockQuery);
+      
+      // Mock tenant query (first call)
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'default',
+          name: 'Default Tenant',
+          slug: 'default',
+          settings: {},
+          subscription_plan: 'basic',
+          max_users: 100,
+          is_active: true
+        }]
+      });
+      
+      // Mock user query
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'test-uuid',
+          email: 'test@example.com',
+          password_hash: hashedPassword,
+          first_name: 'Test',
+          last_name: 'User',
+          role: 'student',
+          tenant_id: 'default-tenant',
+          is_active: true,
+          failed_login_attempts: 0,
+          locked_until: null,
+        }],
+      });
 
       redisClient.set = jest.fn().mockResolvedValue('OK');
 
