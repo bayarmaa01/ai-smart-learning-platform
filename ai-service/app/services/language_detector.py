@@ -89,3 +89,16 @@ def get_system_prompt(language: str, context: dict = None) -> str:
 Provide clear, friendly, and knowledgeable responses in English.
 For questions about courses, technology, or learning topics, give detailed explanations.
 Use markdown formatting when appropriate for better readability."""
+
+
+class LanguageDetector:
+    """Wrapper class for language detection functions."""
+    
+    def detect(self, text: str) -> str:
+        """Detect language and return only the language code."""
+        language, _ = detect_language(text)
+        return language
+    
+    def get_system_prompt(self, language: str, context: dict = None) -> str:
+        """Get system prompt for the detected language."""
+        return get_system_prompt(language, context)

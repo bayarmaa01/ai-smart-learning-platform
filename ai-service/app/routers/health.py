@@ -18,3 +18,21 @@ async def health():
 @router.get("/")
 async def root():
     return {"message": "EduAI AI Service", "version": "1.0.0", "docs": "/docs"}
+
+
+@router.get("/ready")
+async def readiness():
+    return {
+        "status": "ready",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "ai-service",
+    }
+
+
+@router.get("/live")
+async def liveness():
+    return {
+        "status": "alive",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "ai-service",
+    }

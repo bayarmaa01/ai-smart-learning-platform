@@ -105,8 +105,8 @@ class TestChatEndpoint:
             )
             assert response.status_code == 200
             data = response.json()
-            assert "history" in data
-            assert isinstance(data["history"], list)
+            assert "messages" in data
+            assert isinstance(data["messages"], list)
 
     def test_clear_chat_history(self):
         with patch("app.services.chat_service.ChatService.clear_history") as mock:
@@ -127,9 +127,9 @@ class TestHealthEndpoint:
         assert data["status"] in ["healthy", "degraded"]
 
     def test_readiness_check(self):
-        response = client.get("/health/ready")
+        response = client.get("/ready")
         assert response.status_code in [200, 503]
 
     def test_liveness_check(self):
-        response = client.get("/health/live")
+        response = client.get("/live")
         assert response.status_code == 200

@@ -29,6 +29,18 @@ class SkillAssessmentRequest(BaseModel):
     language: str = "en"
 
 
+@router.get("/{user_id}")
+async def get_user_recommendations(user_id: str, language: str = "en"):
+    """Get recommendations for a specific user."""
+    recs = await get_recommendations(
+        user_id=user_id,
+        enrolled_courses=[],
+        language_preference=language,
+        limit=6,
+    )
+    return {"recommendations": recs, "user_id": user_id}
+
+
 @router.post("")
 async def recommendations(request: RecommendationRequest):
     """Get personalized course recommendations."""

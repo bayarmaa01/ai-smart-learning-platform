@@ -243,3 +243,14 @@ def get_provider():
     if _llm_provider is None:
         _llm_provider = get_llm_provider()
     return _llm_provider
+
+
+class LLMService:
+    """Service class for LLM operations."""
+    
+    @staticmethod
+    async def generate_response(messages: List[LLMMessage], system_prompt: str = "", **kwargs) -> str:
+        """Generate a response using the LLM provider."""
+        provider = get_provider()
+        response = await provider.generate(messages, system_prompt, **kwargs)
+        return response.content

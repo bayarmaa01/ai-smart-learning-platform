@@ -79,3 +79,22 @@ async def process_chat(
         "session_id": session_id,
         "sources": [],
     }
+
+
+class ChatService:
+    """Service class for chat operations."""
+    
+    @staticmethod
+    async def get_history(session_id: str) -> list:
+        """Get chat history for a session."""
+        history = await get_conversation_history(session_id)
+        return history or []
+    
+    @staticmethod
+    async def clear_history(session_id: str) -> bool:
+        """Clear chat history for a session."""
+        try:
+            await delete_conversation_history(session_id)
+            return True
+        except Exception:
+            return False
