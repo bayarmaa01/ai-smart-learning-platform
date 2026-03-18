@@ -329,12 +329,11 @@ jobs:
       
     - name: Setup k6
       run: |
+        # Install k6 using official script
+        sudo gpg -k /usr/share/keyrings/ubuntu-archive-keyring.gpg --dearmor -o /usr/share/keyrings/k6-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
         sudo apt-get update
-        sudo apt-get install -y gpg-agent
-        wget -q -O - https://dl.k6.io/release/key/gpg.key
-        sudo gpg --import gpg.key
-        wget -q -O - https://dl.k6.io/release/k6.deb
-        sudo dpkg -i k6.deb
+        sudo apt-get install -y k6
         k6 version
         
     - name: Run performance tests
