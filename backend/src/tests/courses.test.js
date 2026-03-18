@@ -14,40 +14,11 @@ const makeToken = (role = 'student') =>
     { expiresIn: '15m' }
   );
 
-describe('Courses API', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Mock tenant resolution
-    redisClient.get = jest.fn().mockResolvedValue(null);
-    redisClient.set = jest.fn().mockResolvedValue('OK');
-    
-    // Mock tenant query for resolveTenant middleware
-    query.mockImplementation((queryText, params) => {
-      if (queryText.includes('SELECT id, name, slug, settings, subscription_plan, max_users, is_active FROM tenants WHERE id')) {
-        return Promise.resolve({
-          rows: [{
-            id: 'default',
-            name: 'Default Tenant',
-            slug: 'default',
-            settings: {},
-            subscription_plan: 'basic',
-            max_users: 100,
-            is_active: true
-          }]
-        });
-      }
-      return Promise.resolve({ rows: [] });
-    });
-  });
-
-  describe('GET /api/v1/courses', () => {
-    it('should return list of published courses', async () => {
-      const mockQuery = jest.fn();
-      query.mockImplementation(mockQuery);
-      
-      // Mock tenant query (first call)
-      mockQuery.mockResolvedValueOnce({
+// Helper function to mock tenant queries
+const mockTenantQuery = (mockQuery) => {
+  return mockQuery.mockImplementation((queryText, params) => {
+    if (queryText.includes('SELECT id, name, slug, settings, subscription_plan, max_users, is_active FROM tenants WHERE id')) {
+      return Promise.resolve({
         rows: [{
           id: 'default',
           name: 'Default Tenant',
@@ -58,6 +29,25 @@ describe('Courses API', () => {
           is_active: true
         }]
       });
+    }
+    return Promise.resolve({ rows: [] });
+  });
+};
+
+describe('Courses API', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    
+    // Mock Redis for tenant caching
+    redisClient.get = jest.fn().mockResolvedValue(null);
+    redisClient.set = jest.fn().mockResolvedValue('OK');
+  });
+
+  describe('GET /api/v1/courses', () => {
+    it('should return list of published courses', async () => {
+      const mockQuery = jest.fn();
+      mockTenantQuery(mockQuery);
+      query.mockImplementation(mockQuery);
       
       // Mock courses query
       mockQuery.mockResolvedValueOnce({

@@ -6,40 +6,11 @@ const redisClient = require('../cache/redis');
 jest.mock('../db/connection');
 jest.mock('../cache/redis');
 
-describe('Auth API', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    
-    // Mock tenant resolution
-    redisClient.get = jest.fn().mockResolvedValue(null);
-    redisClient.set = jest.fn().mockResolvedValue('OK');
-    
-    // Mock tenant query for resolveTenant middleware
-    query.mockImplementation((queryText, params) => {
-      if (queryText.includes('SELECT id, name, slug, settings, subscription_plan, max_users, is_active FROM tenants WHERE id')) {
-        return Promise.resolve({
-          rows: [{
-            id: 'default',
-            name: 'Default Tenant',
-            slug: 'default',
-            settings: {},
-            subscription_plan: 'basic',
-            max_users: 100,
-            is_active: true
-          }]
-        });
-      }
-      return Promise.resolve({ rows: [] });
-    });
-  });
-
-  describe('POST /api/v1/auth/register', () => {
-    it('should register a new user successfully', async () => {
-      const mockQuery = jest.fn();
-      query.mockImplementation(mockQuery);
-      
-      // Mock tenant query (first call)
-      mockQuery.mockResolvedValueOnce({
+// Helper function to mock tenant queries
+const mockTenantQuery = (mockQuery) => {
+  return mockQuery.mockImplementation((queryText, params) => {
+    if (queryText.includes('SELECT id, name, slug, settings, subscription_plan, max_users, is_active FROM tenants WHERE id')) {
+      return Promise.resolve({
         rows: [{
           id: 'default',
           name: 'Default Tenant',
@@ -50,6 +21,25 @@ describe('Auth API', () => {
           is_active: true
         }]
       });
+    }
+    return Promise.resolve({ rows: [] });
+  });
+};
+
+describe('Auth API', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    
+    // Mock Redis for tenant caching
+    redisClient.get = jest.fn().mockResolvedValue(null);
+    redisClient.set = jest.fn().mockResolvedValue('OK');
+  });
+
+  describe('POST /api/v1/auth/register', () => {
+    it('should register a new user successfully', async () => {
+      const mockQuery = jest.fn();
+      mockTenantQuery(mockQuery);
+      query.mockImplementation(mockQuery);
       
       // Mock user existence check
       mockQuery.mockResolvedValueOnce({ rows: [] });
@@ -59,8 +49,8 @@ describe('Auth API', () => {
         rows: [{
           id: 'test-uuid',
           email: 'test@example.com',
-          first_name: 'Test',
-          last_name: 'User',
+          firstName: 'Test',
+          lastName: 'User',
           role: 'student',
           tenant_id: 'default-tenant',
         }]
