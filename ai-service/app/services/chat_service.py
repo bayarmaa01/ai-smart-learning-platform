@@ -6,7 +6,7 @@ import logging
 from typing import List, Optional, Dict
 from datetime import datetime
 
-from app.core.redis_client import get_cache, set_cache, delete_cache
+from app.core.redis_client import get_cache, set_cache
 from app.core.config import settings
 from app.services.language_detector import detect_language, get_system_prompt
 from app.services.llm_service import LLMMessage, get_provider
@@ -110,8 +110,9 @@ class ChatService:
     @staticmethod
     async def clear_history(session_id: str) -> bool:
         """Clear chat history for a session."""
+        from app.core.redis_client import delete_cache
         try:
-            await delete_conversation_history(session_id)
+            await delete_cache(f"chat:history:{session_id}")
             return True
         except Exception:
             return False
