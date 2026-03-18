@@ -276,15 +276,15 @@ jobs:
     - name: Update Helm values for staging
       run: |
         # Update Helm values.yaml with new image tags
-        sed -i "s|frontend:.*|frontend: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
-        sed -i "s|backend:.*|backend: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
-        sed -i "s|aiService:.*|aiService: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
-        sed -i "s|environment:.*|environment: staging|g" helm/values.yaml
+        sed -i "s|frontend:.*|frontend: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/eduai/values.yaml
+        sed -i "s|backend:.*|backend: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/eduai/values.yaml
+        sed -i "s|aiService:.*|aiService: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/eduai/values.yaml
+        sed -i "s|environment:.*|environment: staging|g" helm/eduai/values.yaml
         
         # Commit and push Helm values update
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add helm/values.yaml
+        git add helm/eduai/values.yaml
         git diff --staged --quiet || git commit -m "chore: Update staging images to ${{ env.IMAGE_TAG }}"
         git push
 
@@ -304,15 +304,15 @@ jobs:
     - name: Update Helm values for production
       run: |
         # Update Helm values.yaml with new image tags
-        sed -i "s|frontend:.*|frontend: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
-        sed -i "s|backend:.*|backend: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
-        sed -i "s|aiService:.*|aiService: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/values.yaml
-        sed -i "s|environment:.*|environment: production|g" helm/values.yaml
+        sed -i "s|frontend:.*|frontend: ${{ env.FRONTEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/eduai/values.yaml
+        sed -i "s|backend:.*|backend: ${{ env.BACKEND_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/eduai/values.yaml
+        sed -i "s|aiService:.*|aiService: ${{ env.AI_IMAGE }}:${{ env.IMAGE_TAG }}|g" helm/eduai/values.yaml
+        sed -i "s|environment:.*|environment: production|g" helm/eduai/values.yaml
         
         # Commit and push Helm values update
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add helm/values.yaml
+        git add helm/eduai/values.yaml
         git diff --staged --quiet || git commit -m "chore: Update production images to ${{ env.IMAGE_TAG }}"
         git push
 
