@@ -328,9 +328,28 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Setup k6
-      uses: grafana/k6-action@v1
-      with:
-        k6-version: 'latest'
+      run: |
+        # Install k6 using reliable curl method with proper URL handling
+        K6_VERSION=$(curl -s https://api.github.com/repos/grafana/k6/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+        echo "Installing k6 version: $K6_VERSION"
+        
+        # Download with proper redirect handling and validation
+        curl -L "https://github.com/grafana/k6/releases/download/${K6_VERSION}/k6-${K6_VERSION}-linux-amd64.tar.gz" -o k6.tar.gz
+        
+        # Verify download size (should be > 10MB)
+        if [ $(stat -c%s k6.tar.gz) -lt 10000000 ]; then
+          echo "Error: Downloaded file is too small, likely invalid"
+          exit 1
+        fi
+        
+        # Extract and install
+        tar -xzf k6.tar.gz
+        sudo mv k6-${K6_VERSION}-linux-amd64/k6 /usr/local/bin/
+        sudo chmod +x /usr/local/bin/k6
+        
+        # Verify installation
+        k6 version
+        rm -f k6.tar.gz
         
     - name: Run performance tests
       run: |
