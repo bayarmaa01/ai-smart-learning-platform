@@ -328,13 +328,9 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Setup k6
-      run: |
-        # Install k6 using curl method (more reliable)
-        curl https://github.com/grafana/k6/releases/latest/download/k6-linux-amd64.tar.gz -L -o k6.tar.gz
-        tar -xvf k6.tar.gz
-        sudo mv k6-v*/k6 /usr/local/bin/
-        sudo chmod +x /usr/local/bin/k6
-        k6 version
+      uses: grafana/k6-action@v1
+      with:
+        k6-version: 'latest'
         
     - name: Run performance tests
       run: |
