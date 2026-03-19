@@ -353,7 +353,7 @@ jobs:
         
     - name: Run performance tests
       run: |
-        k6 run --out json --vus 100 --duration 30s tests/performance/load-test.js --env BASE_URL=https://ailearn.duckdns.org
+        k6 run --out json --vus 100 --duration 30s tests/performance/load-test.js --env BASE_URL=https://ailearn.duckdns.org --env MODE=ci
         
     - name: Upload performance results
       uses: actions/upload-artifact@v4
