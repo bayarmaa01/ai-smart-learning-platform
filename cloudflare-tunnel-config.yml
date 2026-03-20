@@ -1,0 +1,17 @@
+tunnel: dbea55ba-3659-4dd7-ac66-67f900defbfd
+credentials-file: /home/bayarmaa/.cloudflared/credentials.json
+
+ingress:
+  - hostname: app.ailearn.duckdns.org
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+    originRequest:
+      noTLSVerify: true
+  - hostname: api.ailearn.duckdns.org
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+    originRequest:
+      noTLSVerify: true
+  - hostname: ai.ailearn.duckdns.org
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404
