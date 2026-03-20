@@ -4,7 +4,7 @@
 #  EDUAI - Production Grade Kubernetes Deployment Script
 # ==========================================================
 # Features
-# - Auto Minikube cluster setup with self-healing
+# - Auto Minikube cluster setup
 # - Docker build & push with BuildKit
 # - Kubernetes deployment with HPA
 # - Production monitoring stack
@@ -30,17 +30,8 @@ FRONTEND_IMAGE="$DOCKER_USERNAME/eduai-frontend:latest"
 BACKEND_IMAGE="$DOCKER_USERNAME/eduai-backend:latest"
 AI_IMAGE="$DOCKER_USERNAME/eduai-ai-service:latest"
 
-# Auto-detect system resources
-TOTAL_RAM=$(free -m | awk 'NR==2{print $2}')
-if [ "$TOTAL_RAM" -lt 8192 ]; then
-    MINIKUBE_CPUS=2
-    MINIKUBE_MEMORY=4096
-    log "Low memory system detected: Using 2 CPUs, 4GB RAM"
-else
-    MINIKUBE_CPUS=4
-    MINIKUBE_MEMORY=6144
-    log "Sufficient memory: Using 4 CPUs, 6GB RAM"
-fi
+MINIKUBE_CPUS=4
+MINIKUBE_MEMORY=6144
 
 ############################################
 # COLORS
@@ -101,27 +92,6 @@ EOF
 }
 
 ############################################
-# RETRY MECHANISM
-############################################
-
-retry() {
-    local retries=$1
-    shift
-    local count=0
-    
-    until "$@"; do
-        exit_code=$?
-        count=$((count + 1))
-        if [ $count -lt $retries ]; then
-            warn "Command failed (attempt $count/$retries). Retrying in 5 seconds..."
-            sleep 5
-        else
-            fail "Command failed after $retries attempts"
-        fi
-    done
-}
-
-############################################
 # CHECK DEPENDENCIES
 ############################################
 
@@ -150,110 +120,43 @@ check_dependencies() {
 }
 
 ############################################
-# HEALTH CHECKS
-############################################
-
-health_checks() {
-    step "Performing system health checks..."
-    
-    # Check cluster info
-    log "Verifying cluster connectivity..."
-    if ! kubectl cluster-info &>/dev/null; then
-        fail "Cannot connect to Kubernetes cluster"
-    fi
-    
-    # Check nodes
-    log "Verifying cluster nodes..."
-    if ! kubectl get nodes &>/dev/null; then
-        fail "Cannot list cluster nodes"
-    fi
-    
-    # Check node status
-    local node_count=$(kubectl get nodes --no-headers | wc -l)
-    if [ "$node_count" -eq 0 ]; then
-        fail "No nodes available in cluster"
-    fi
-    
-    log "Cluster has $node_count node(s) available"
-    success "System health checks passed"
-}
-
-############################################
 # START MINIKUBE CLUSTER
 ############################################
 
 start_cluster() {
-    step "Starting Minikube cluster with clean start..."
+    step "Starting Minikube cluster..."
     
-    # Force clean start
-    log "Deleting existing cluster (if exists)..."
-    minikube delete -p $CLUSTER_NAME || true
-    
-    log "Creating fresh cluster..."
-    cmd "minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker"
+    if minikube status -p $CLUSTER_NAME &>/dev/null; then
+        log "Cluster already exists, checking status..."
+        if ! minikube status -p $CLUSTER_NAME | grep -q "Running"; then
+            log "Starting existing cluster..."
+            minikube start -p $CLUSTER_NAME
+        fi
+    else
+        log "Creating new cluster..."
+        minikube start \
+            -p $CLUSTER_NAME \
+            --cpus=$MINIKUBE_CPUS \
+            --memory=$MINIKUBE_MEMORY \
+            --disk-size=50g \
+            --kubernetes-version=v1.28.0 \
+            --driver=docker \
+            --container-runtime=docker
+    fi
     
     # Set kubectl context
     kubectl config use-context $CLUSTER_NAME
     
+    # Enable required addons
+    log "Enabling Minikube addons..."
+    minikube addons enable ingress -p $CLUSTER_NAME
+    minikube addons enable metrics-server -p $CLUSTER_NAME
+    minikube addons enable dashboard -p $CLUSTER_NAME
+    
     # Connect Docker to Minikube
     eval $(minikube -p $CLUSTER_NAME docker-env)
     
-    success "Minikube cluster created successfully"
-}
-
-############################################
-# ENABLE INGRESS WITH RETRY
-############################################
-
-enable_ingress() {
-    step "Enabling Ingress addon with retry logic..."
-    
-    local max_retries=5
-    local retry_count=0
-    
-    while [ $retry_count -lt $max_retries ]; do
-        log "Enabling ingress addon (attempt $((retry_count + 1))/$max_retries)..."
-        
-        if minikube addons enable ingress -p $CLUSTER_NAME; then
-            success "Ingress addon enabled successfully"
-            break
-        else
-            retry_count=$((retry_count + 1))
-            if [ $retry_count -lt $max_retries ]; then
-                warn "Ingress enable failed, waiting 10 seconds before retry..."
-                sleep 10
-            else
-                fail "Failed to enable ingress addon after $max_retries attempts"
-            fi
-        fi
-    done
-    
-    # Wait for ingress controller to be ready
-    log "Waiting for Ingress Controller to be ready..."
-    retry 3 kubectl wait --namespace ingress-nginx \
-        --for=condition=ready pod \
-        --selector=app.kubernetes.io/name=ingress-nginx \
-        --timeout=300s
-    
-    success "Ingress Controller is ready"
-}
-
-############################################
-# ENABLE OTHER ADDONS
-############################################
-
-enable_other_addons() {
-    step "Enabling additional addons..."
-    
-    # Enable metrics-server with retry
-    log "Enabling metrics-server..."
-    retry 3 minikube addons enable metrics-server -p $CLUSTER_NAME
-    
-    # Enable dashboard with retry
-    log "Enabling dashboard..."
-    retry 3 minikube addons enable dashboard -p $CLUSTER_NAME
-    
-    success "All addons enabled successfully"
+    success "Minikube cluster ready"
 }
 
 ############################################
@@ -329,9 +232,9 @@ push_images() {
 create_namespaces() {
     step "Creating Kubernetes namespaces..."
     
-    retry 3 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-    retry 3 kubectl create namespace $MONITORING_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-    retry 3 kubectl create namespace logging --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create namespace $MONITORING_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create namespace logging --dry-run=client -o yaml | kubectl apply -f -
     
     success "Namespaces created"
 }
@@ -345,7 +248,7 @@ deploy_infrastructure() {
     
     # Deploy PostgreSQL
     log "Deploying PostgreSQL..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -426,7 +329,7 @@ EOF
     
     # Deploy Redis
     log "Deploying Redis..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -523,7 +426,7 @@ deploy_applications() {
     
     # Deploy Backend
     log "Deploying Backend API..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -631,7 +534,7 @@ EOF
     
     # Deploy AI Service
     log "Deploying AI Service..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -734,7 +637,7 @@ EOF
     
     # Deploy Frontend
     log "Deploying Frontend..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -818,7 +721,7 @@ configure_autoscaling() {
     step "Configuring Horizontal Pod Autoscaling..."
     
     # Backend HPA
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -847,7 +750,7 @@ spec:
 EOF
     
     # AI Service HPA
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -885,28 +788,28 @@ install_ingress_tls() {
         kubectl create namespace ingress-nginx
     fi
     
-    retry 3 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
+    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
     
     # Wait for ingress controller
     log "Waiting for Ingress Controller to be ready..."
-    retry 3 kubectl wait --namespace ingress-nginx \
+    kubectl wait --namespace ingress-nginx \
         --for=condition=ready pod \
         --selector=app.kubernetes.io/component=controller \
         --timeout=300s
     
     # Install cert-manager
     log "Installing cert-manager..."
-    retry 3 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
     
     # Wait for cert-manager
     log "Waiting for cert-manager to be ready..."
-    retry 3 kubectl wait --for=condition=available deployment/cert-manager -n cert-manager --timeout=300s
-    retry 3 kubectl wait --for=condition=available deployment/cert-manager-cainjector -n cert-manager --timeout=300s
-    retry 3 kubectl wait --for=condition=available deployment/cert-manager-webhook -n cert-manager --timeout=300s
+    kubectl wait --for=condition=available deployment/cert-manager -n cert-manager --timeout=300s
+    kubectl wait --for=condition=available deployment/cert-manager-cainjector -n cert-manager --timeout=300s
+    kubectl wait --for=condition=available deployment/cert-manager-webhook -n cert-manager --timeout=300s
     
     # Create Cluster Issuer
     log "Creating Let's Encrypt Cluster Issuer..."
-    retry 3 kubectl apply -f - <<EOF
+    kubectl apply -f - <<EOF
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -925,7 +828,7 @@ EOF
     
     # Create Secrets
     log "Creating application secrets..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
@@ -942,7 +845,7 @@ data:
 EOF
     
     # Create ConfigMap
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -963,7 +866,7 @@ EOF
     
     # Create Ingress
     log "Creating Ingress with TLS..."
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -1043,7 +946,7 @@ install_monitoring() {
     
     # Install Prometheus Stack
     log "Installing Prometheus monitoring stack..."
-    retry 3 helm install prometheus prometheus-community/kube-prometheus-stack \
+    helm install prometheus prometheus-community/kube-prometheus-stack \
         --namespace $MONITORING_NAMESPACE \
         --create-namespace \
         --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=50Gi \
@@ -1058,8 +961,8 @@ install_monitoring() {
     
     # Wait for monitoring stack
     log "Waiting for monitoring stack to be ready..."
-    retry 3 kubectl wait --for=condition=available deployment/prometheus-grafana -n $MONITORING_NAMESPACE --timeout=300s
-    retry 3 kubectl wait --for=condition=available deployment/prometheus-kube-prometheus-stack-prometheus -n $MONITORING_NAMESPACE --timeout=300s
+    kubectl wait --for=condition=available deployment/prometheus-grafana -n $MONITORING_NAMESPACE --timeout=300s
+    kubectl wait --for=condition=available deployment/prometheus-kube-prometheus-stack-prometheus -n $MONITORING_NAMESPACE --timeout=300s
     
     success "Monitoring stack installed"
 }
@@ -1077,7 +980,7 @@ install_logging() {
     
     # Install Loki
     log "Installing Loki log aggregation..."
-    retry 3 helm install loki grafana/loki-stack \
+    helm install loki grafana/loki-stack \
         --namespace logging \
         --create-namespace \
         --set loki.persistence.enabled=true \
@@ -1096,7 +999,7 @@ configure_security() {
     step "Configuring network security policies..."
     
     # Default deny policy
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -1110,7 +1013,7 @@ spec:
 EOF
     
     # Allow specific traffic
-    retry 3 kubectl apply -n $NAMESPACE -f - <<EOF
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -1181,20 +1084,20 @@ wait_for_deployment() {
     
     # Wait for infrastructure
     log "Waiting for PostgreSQL..."
-    retry 3 kubectl wait --for=condition=ready pod -l app=postgres -n $NAMESPACE --timeout=300s
+    kubectl wait --for=condition=ready pod -l app=postgres -n $NAMESPACE --timeout=300s
     
     log "Waiting for Redis..."
-    retry 3 kubectl wait --for=condition=ready pod -l app=redis -n $NAMESPACE --timeout=300s
+    kubectl wait --for=condition=ready pod -l app=redis -n $NAMESPACE --timeout=300s
     
     # Wait for applications
     log "Waiting for Backend..."
-    retry 3 kubectl wait --for=condition=available deployment/backend -n $NAMESPACE --timeout=300s
+    kubectl wait --for=condition=available deployment/backend -n $NAMESPACE --timeout=300s
     
     log "Waiting for AI Service..."
-    retry 3 kubectl wait --for=condition=available deployment/ai-service -n $NAMESPACE --timeout=300s
+    kubectl wait --for=condition=available deployment/ai-service -n $NAMESPACE --timeout=300s
     
     log "Waiting for Frontend..."
-    retry 3 kubectl wait --for=condition=available deployment/frontend -n $NAMESPACE --timeout=300s
+    kubectl wait --for=condition=available deployment/frontend -n $NAMESPACE --timeout=300s
     
     success "All deployments ready"
 }
@@ -1241,42 +1144,116 @@ show_access_info() {
     echo -e "   $BACKEND_IMAGE"
     echo -e "   $AI_IMAGE"
     
-    echo -e "\n${CYAN}💾 System Resources:${NC}"
-    echo -e "   🖥️  Total RAM:     ${YELLOW}${TOTAL_RAM}MB${NC}"
-    echo -e "   ⚙️  Cluster CPUs:  ${YELLOW}${MINIKUBE_CPUS}${NC}"
-    echo -e "   💾 Cluster RAM:   ${YELLOW}${MINIKUBE_MEMORY}MB${NC}"
+    echo -e "\n${GREEN}✨ EDUAI Platform is ready for production use! ✨${NC}\n"
 }
 
 ############################################
-# MAIN EXECUTION
+# CLEANUP FUNCTION
+############################################
+
+cleanup() {
+    step "Cleaning up deployment..."
+    
+    # Delete all resources
+    kubectl delete namespace $NAMESPACE --ignore-not-found=true --wait=true
+    kubectl delete namespace $MONITORING_NAMESPACE --ignore-not-found=true --wait=true
+    kubectl delete namespace logging --ignore-not-found=true --wait=true
+    kubectl delete namespace ingress-nginx --ignore-not-found=true --wait=true
+    kubectl delete namespace cert-manager --ignore-not-found=true --wait=true
+    
+    # Stop minikube
+    minikube stop -p $CLUSTER_NAME
+    
+    success "Cleanup completed"
+}
+
+############################################
+# SHOW HELP
+############################################
+
+show_help() {
+    echo "EDUAI - Production Grade Kubernetes Deployment"
+    echo ""
+    echo "Usage: $0 [COMMAND]"
+    echo ""
+    echo "Commands:"
+    echo "  deploy     - Deploy complete platform (default)"
+    echo "  build      - Build Docker images only"
+    echo "  push       - Push images to Docker Hub only"
+    echo "  monitor    - Install monitoring stack only"
+    echo "  verify     - Verify deployment status"
+    echo "  cleanup    - Delete all deployed resources"
+    echo "  help       - Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0              # Deploy everything"
+    echo "  $0 deploy       # Deploy everything"
+    echo "  $0 build        # Build images only"
+    echo "  $0 verify       # Check deployment status"
+    echo "  $0 cleanup      # Delete everything"
+    echo ""
+    echo "Platform will be available at: https://$DOMAIN"
+    echo "Docker Hub: $DOCKER_USERNAME"
+}
+
+############################################
+# MAIN FUNCTION
 ############################################
 
 main() {
     show_banner
     
-    check_dependencies
-    start_cluster
-    health_checks
-    enable_ingress
-    enable_other_addons
-    build_images
-    push_images
-    create_namespaces
-    deploy_infrastructure
-    deploy_applications
-    configure_autoscaling
-    install_ingress_tls
-    install_monitoring
-    install_logging
-    configure_security
-    wait_for_deployment
-    show_access_info
-    
-    success "EDUAI production deployment completed successfully!"
+    case "${1:-deploy}" in
+        "deploy")
+            check_dependencies
+            start_cluster
+            create_namespaces
+            build_images
+            push_images
+            deploy_infrastructure
+            deploy_applications
+            configure_autoscaling
+            install_ingress_tls
+            install_monitoring
+            install_logging
+            configure_security
+            wait_for_deployment
+            show_access_info
+            ;;
+        "build")
+            check_dependencies
+            build_images
+            ;;
+        "push")
+            check_dependencies
+            push_images
+            ;;
+        "monitor")
+            check_dependencies
+            install_monitoring
+            ;;
+        "verify")
+            check_dependencies
+            echo -e "\n${CYAN}📊 Pod Status:${NC}"
+            kubectl get pods -n $NAMESPACE
+            echo -e "\n${CYAN}🔗 Service Status:${NC}"
+            kubectl get services -n $NAMESPACE
+            echo -e "\n${CYAN}🌐 Ingress Status:${NC}"
+            kubectl get ingress -n $NAMESPACE
+            echo -e "\n${CYAN}📈 HPA Status:${NC}"
+            kubectl get hpa -n $NAMESPACE
+            ;;
+        "cleanup")
+            cleanup
+            ;;
+        "help"|"-h"|"--help")
+            show_help
+            ;;
+        *)
+            fail "Unknown command: $1"
+            ;;
+    esac
 }
 
-# Handle script interruption
-trap 'warn "Script interrupted. Cleanup may be required."' INT TERM
-
-# Run main function
+# Execute main function
 main "$@"
