@@ -190,7 +190,9 @@ start_cluster() {
     minikube delete -p $CLUSTER_NAME || true
     
     log "Creating fresh cluster..."
-    cmd "minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker"
+    if ! cmd "minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker"; then
+        fail "Minikube start command failed"
+    fi
     
     # Wait for all components to be ready
     log "Waiting for Minikube components to be ready..."
@@ -212,7 +214,7 @@ start_cluster() {
     # Final status check
     FINAL_STATUS=$(minikube status -p $CLUSTER_NAME 2>/dev/null || echo "not_running")
     if ! echo "$FINAL_STATUS" | grep -q "Running"; then
-        fail "Minikube cluster failed to start within timeout"
+        fail "Minikube cluster failed to start within timeout. Check Docker daemon and system resources."
     fi
     
     # Set kubectl context
