@@ -24,7 +24,9 @@ def mock_redis():
 
 @pytest.fixture(autouse=True)
 def mock_llm():
-    with patch("app.services.llm_service.LLMService.generate_response") as mock:
+    with patch(
+        "app.services.llm_service.LLMService.generate_response"
+    ) as mock:
         mock.return_value = "This is a test AI response."
         yield mock
 
@@ -90,7 +92,9 @@ class TestChatEndpoint:
         assert response.status_code == 422
 
     def test_get_chat_history(self):
-        with patch("app.services.chat_service.ChatService.get_history") as mock:
+        with patch(
+            "app.services.chat_service.ChatService.get_history"
+        ) as mock:
             mock.return_value = [
                 {
                     "role": "user",
@@ -105,15 +109,16 @@ class TestChatEndpoint:
             )
             assert response.status_code == 200
             data = response.json()
-            assert "history" in data
-            assert isinstance(data["history"], list)
+            assert "messages" in data
+            assert isinstance(data["messages"], list)
 
     def test_clear_chat_history(self):
-        with patch("app.services.chat_service.ChatService.clear_history") as mock:
+        with patch(
+            "app.services.chat_service.ChatService.clear_history"
+        ) as mock:
             mock.return_value = True
             response = client.delete(
-                "/chat/history/test-user-123",
-                params={"session_id": "test-session-456"},
+                "/chat/test-session-456",
             )
             assert response.status_code == 200
 
@@ -127,9 +132,9 @@ class TestHealthEndpoint:
         assert data["status"] in ["healthy", "degraded"]
 
     def test_readiness_check(self):
-        response = client.get("/health/ready")
+        response = client.get("/ready")
         assert response.status_code in [200, 503]
 
     def test_liveness_check(self):
-        response = client.get("/health/live")
+        response = client.get("/live")
         assert response.status_code == 200

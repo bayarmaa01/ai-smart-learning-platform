@@ -248,6 +248,7 @@ module.exports = {
 if (require.main === module) {
   const command = process.argv[2];
   const param = process.argv[3];
+  let name;
   
   switch (command) {
     case 'migrate':
@@ -257,7 +258,7 @@ if (require.main === module) {
       migrator.rollback(parseInt(param) || 1);
       break;
     case 'create':
-      const name = param || 'new_migration';
+      name = param || 'new_migration';
       migrator.createMigration(name, 'Auto-generated migration');
       break;
     case 'status':

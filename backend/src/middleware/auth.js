@@ -2,7 +2,6 @@ const jwt = require('jsonwebtoken');
 const { query } = require('../db/connection');
 const { getCache, setCache } = require('../cache/redis');
 const { AppError } = require('./errorHandler');
-const { logger } = require('../utils/logger');
 
 const verifyToken = async (req, res, next) => {
   try {

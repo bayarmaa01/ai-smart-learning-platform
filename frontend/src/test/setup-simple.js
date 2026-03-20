@@ -1,9 +1,5 @@
-// Simple Vitest setup
-import { vi, expect } from 'vitest'
-import * as matchers from '@testing-library/jest-dom'
-
-// Extend Vitest's expect with jest-dom matchers
-expect.extend(matchers)
+// Simple test setup for Vitest
+import { vi } from 'vitest'
 
 // Mock IntersectionObserver
 global.IntersectionObserver = vi.fn().mockImplementation(() => ({

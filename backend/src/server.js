@@ -130,6 +130,9 @@ process.on('unhandledRejection', (err) => {
   server.close(() => process.exit(1));
 });
 
-start();
+// Only start server if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  start();
+}
 
 module.exports = { app, server };

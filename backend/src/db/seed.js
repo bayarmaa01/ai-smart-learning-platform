@@ -329,7 +329,7 @@ class DatabaseSeeder {
     }
   }
 
-  async createCourseContent(courseId, course) {
+  async createCourseContent(courseId, _course) {
     try {
       // Create sections
       const sections = [

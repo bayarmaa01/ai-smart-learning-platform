@@ -5,6 +5,9 @@
 # Stage 1: Dependencies
 FROM node:20-alpine AS deps
 
+# Set Node.js memory limit for stability
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production && \
