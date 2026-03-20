@@ -279,20 +279,18 @@ enable_ingress() {
         # Check if ingress controller pods are running
         local pod_status=$(kubectl get pods -n ingress-nginx --no-headers 2>/dev/null || echo "no_pods")
         
-        if echo "$pod_status" | grep -q "Running"; then
-            # Check if all pods are running
-            local total_pods=$(echo "$pod_status" | wc -l)
-            local running_pods=$(echo "$pod_status" | grep -c "Running" || echo "0")
-            
-            if [ "$running_pods" -eq "$total_pods" ] && [ "$running_pods" -gt 0 ]; then
-                success "Ingress Controller is ready ($running_pods pods running)"
-                return 0
-            fi
+        # Count running pods (ignore Completed admission pods)
+        local running_pods=$(echo "$pod_status" | grep -c "Running" || echo "0")
+        local total_pods=$(echo "$pod_status" | grep -v "Completed" | wc -l)
+        
+        if [ "$running_pods" -gt 0 ] && [ "$running_pods" -eq "$total_pods" ]; then
+            success "Ingress Controller is ready ($running_pods pods running)"
+            return 0
         fi
         
         wait_retries=$((wait_retries + 1))
         if [ $wait_retries -lt $max_wait_retries ]; then
-            log "Waiting for Ingress Controller... ($wait_retries/$max_wait_retries) - Pods: $pod_status"
+            log "Waiting for Ingress Controller... ($wait_retries/$max_wait_retries) - Running: $running_pods/$total_pods pods"
             sleep 30
         fi
     done
