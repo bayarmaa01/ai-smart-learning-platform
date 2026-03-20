@@ -65,6 +65,9 @@ CLUSTER_NAME="eduai-cluster"
 NAMESPACE="eduai"
 MONITORING_NAMESPACE="monitoring"
 DOMAIN="ailearn.duckdns.org"
+APP_DOMAIN="app.ailearn.duckdns.org"
+API_DOMAIN="api.ailearn.duckdns.org"
+AI_DOMAIN="ai.ailearn.duckdns.org"
 DOCKER_USERNAME="bayarmaa"
 
 FRONTEND_IMAGE="$DOCKER_USERNAME/eduai-frontend:latest"
@@ -1043,7 +1046,7 @@ metadata:
     nginx.ingress.kubernetes.io/rate-limit: "100"
     nginx.ingress.kubernetes.io/rate-limit-window: "1m"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "https://$DOMAIN"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://$APP_DOMAIN"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
     nginx.ingress.kubernetes.io/configuration-snippet: |
@@ -1054,10 +1057,12 @@ metadata:
 spec:
   tls:
     - hosts:
-        - $DOMAIN
+        - $APP_DOMAIN
+        - $API_DOMAIN
+        - $AI_DOMAIN
       secretName: eduai-tls
   rules:
-    - host: $DOMAIN
+    - host: $API_DOMAIN
       http:
         paths:
           - path: /api/
@@ -1067,13 +1072,6 @@ spec:
                 name: backend
                 port:
                   number: 5000
-          - path: /ai/
-            pathType: Prefix
-            backend:
-              service:
-                name: ai-service
-                port:
-                  number: 8000
           - path: /socket.io/
             pathType: Prefix
             backend:
@@ -1081,6 +1079,19 @@ spec:
                 name: backend
                 port:
                   number: 5000
+    - host: $AI_DOMAIN
+      http:
+        paths:
+          - path: /ai/
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-service
+                port:
+                  number: 8000
+    - host: $APP_DOMAIN
+      http:
+        paths:
           - path: /
             pathType: Prefix
             backend:
@@ -1272,10 +1283,10 @@ show_access_info() {
     
     echo -e "\n${GREEN}🎉 EDUAI Platform Deployed Successfully!${NC}\n"
     
-    echo -e "${CYAN}📱 Application URLs:${NC}"
-    echo -e "   🌐 Frontend:     ${YELLOW}https://$DOMAIN${NC}"
-    echo -e "   🔧 Backend API:  ${YELLOW}https://$DOMAIN/api${NC}"
-    echo -e "   🤖 AI Service:   ${YELLOW}https://$DOMAIN/ai${NC}"
+    echo -e "\n${CYAN}📱 Application URLs:${NC}"
+    echo -e "   🌐 Frontend:     ${YELLOW}https://$APP_DOMAIN${NC}"
+    echo -e "   🔧 Backend API:  ${YELLOW}https://$API_DOMAIN${NC}"
+    echo -e "   🤖 AI Service:   ${YELLOW}https://$AI_DOMAIN${NC}"
     
     echo -e "\n${CYAN}📊 Monitoring URLs:${NC}"
     echo -e "   📈 Grafana:      ${YELLOW}https://grafana.$DOMAIN${NC} (admin/admin123)"

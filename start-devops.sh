@@ -20,6 +20,9 @@ CLUSTER_NAME="eduai-cluster"
 NAMESPACE="eduai"
 MONITORING_NAMESPACE="monitoring"
 DOMAIN="ailearn.duckdns.org"
+APP_DOMAIN="app.ailearn.duckdns.org"
+API_DOMAIN="api.ailearn.duckdns.org"
+AI_DOMAIN="ai.ailearn.duckdns.org"
 TUNNEL_ID="dbea55ba-3659-4dd7-ac66-67f900defbfd"
 CLOUDFLARED_CONFIG_DIR="$HOME/.cloudflared"
 CLOUDFLARED_LOG_DIR="/var/log/cloudflared"
@@ -148,7 +151,15 @@ tunnel: $TUNNEL_ID
 credentials-file: $CLOUDFLARED_CONFIG_DIR/credentials.json
 
 ingress:
-  - hostname: $DOMAIN
+  - hostname: $APP_DOMAIN
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+    originRequest:
+      noTLSVerify: true
+  - hostname: $API_DOMAIN
+    service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+    originRequest:
+      noTLSVerify: true
+  - hostname: $AI_DOMAIN
     service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
     originRequest:
       noTLSVerify: true
@@ -235,7 +246,7 @@ verify_tunnel_health() {
     local health_check_interval=5
     
     while [ $retries -lt $max_retries ]; do
-        if curl -s --max-time 10 "https://$DOMAIN/health" > /dev/null 2>&1; then
+        if curl -s --max-time 10 "https://$APP_DOMAIN/health" > /dev/null 2>&1; then
             success "Cloudflare Tunnel is healthy and accessible"
             return 0
         fi
@@ -340,7 +351,7 @@ monitor_tunnel_restart() {
 
 TUNNEL_SERVICE="cloudflared"
 LOG_DIR="/var/log/cloudflared"
-HEALTH_URL="https://ailearn.duckdns.org/health"
+HEALTH_URL="https://$APP_DOMAIN/health"
 CHECK_INTERVAL=30
 MAX_FAILURES=3
 
@@ -411,8 +422,12 @@ show_status() {
     echo -e "   ☸️  Minikube:        $(minikube status -p $CLUSTER_NAME | head -1 | awk '{print $2}')"
     
     echo -e "\n${CYAN}🌐 Access URLs:${NC}"
-    echo -e "   🌐 Platform:        ${YELLOW}https://$DOMAIN${NC}"
-    echo -e "   🔧 Health Check:    ${YELLOW}https://$DOMAIN/health${NC}"
+    echo -e "   🌐 Frontend:     ${YELLOW}https://$APP_DOMAIN${NC}"
+    echo -e "   🔧 Backend API:  ${YELLOW}https://$API_DOMAIN${NC}"
+    echo -e "   🤖 AI Service:   ${YELLOW}https://$AI_DOMAIN${NC}"
+    
+    echo -e "\n${CYAN}🔍 Health Check:${NC}"
+    echo -e "   curl -s https://$APP_DOMAIN/health"
     
     echo -e "\n${CYAN}📋 Management Commands:${NC}"
     echo -e "   📊 Tunnel Status:  sudo systemctl status cloudflared"
@@ -420,13 +435,13 @@ show_status() {
     echo -e "   🔄 Restart Tunnel: sudo systemctl restart cloudflared"
     echo -e "   📈 Minikube Status: minikube status -p $CLUSTER_NAME"
     
-    echo -e "\n${CYAN}🔍 Health Check:${NC}"
-    echo -e "   curl -s https://$DOMAIN/health"
-    
     echo -e "\n${CYAN}⚙️  Configuration:${NC}"
     echo -e "   📁 Config File:     $CLOUDFLARED_CONFIG_DIR/config.yml"
     echo -e "   📁 Log Directory:   $CLOUDFLARED_LOG_DIR"
     echo -e "   🏷️  Tunnel ID:      $TUNNEL_ID"
+    echo -e "   🌐 Frontend URL:   $APP_DOMAIN"
+    echo -e "   🔧 API URL:       $API_DOMAIN"
+    echo -e "   🤖 AI URL:        $AI_DOMAIN"
 }
 
 ############################################
