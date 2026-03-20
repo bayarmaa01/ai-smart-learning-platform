@@ -267,14 +267,39 @@ enable_ingress() {
         fi
     done
     
-    # Wait for ingress controller to be ready
+    # Wait for ingress controller to be ready with increased timeout
     log "Waiting for Ingress Controller to be ready..."
-    retry 3 kubectl wait --namespace ingress-nginx \
-        --for=condition=ready pod \
-        --selector=app.kubernetes.io/name=ingress-nginx \
-        --timeout=300s
+    local wait_retries=0
+    local max_wait_retries=12  # 12 * 30 seconds = 6 minutes
     
-    success "Ingress Controller is ready"
+    while [ $wait_retries -lt $max_wait_retries ]; do
+        # Check if ingress controller pods are running
+        local pod_status=$(kubectl get pods -n ingress-nginx --no-headers 2>/dev/null || echo "no_pods")
+        
+        if echo "$pod_status" | grep -q "Running"; then
+            # Check if all pods are running
+            local total_pods=$(echo "$pod_status" | wc -l)
+            local running_pods=$(echo "$pod_status" | grep -c "Running" || echo "0")
+            
+            if [ "$running_pods" -eq "$total_pods" ] && [ "$running_pods" -gt 0 ]; then
+                success "Ingress Controller is ready ($running_pods pods running)"
+                return 0
+            fi
+        fi
+        
+        wait_retries=$((wait_retries + 1))
+        if [ $wait_retries -lt $max_wait_retries ]; then
+            log "Waiting for Ingress Controller... ($wait_retries/$max_wait_retries) - Pods: $pod_status"
+            sleep 30
+        fi
+    done
+    
+    # Final check with detailed status
+    log "Final Ingress Controller status:"
+    kubectl get pods -n ingress-nginx || log "Failed to get ingress pods"
+    kubectl get events -n ingress-nginx --sort-by='.lastTimestamp' | tail -5 || log "Failed to get ingress events"
+    
+    fail "Ingress Controller failed to become ready within 6 minutes"
 }
 
 ############################################
