@@ -17,32 +17,6 @@
 set -euo pipefail
 
 ############################################
-# CONFIGURATION
-############################################
-
-CLUSTER_NAME="eduai-cluster"
-NAMESPACE="eduai"
-MONITORING_NAMESPACE="monitoring"
-DOMAIN="ailearn.duckdns.org"
-DOCKER_USERNAME="bayarmaa"
-
-FRONTEND_IMAGE="$DOCKER_USERNAME/eduai-frontend:latest"
-BACKEND_IMAGE="$DOCKER_USERNAME/eduai-backend:latest"
-AI_IMAGE="$DOCKER_USERNAME/eduai-ai-service:latest"
-
-# Auto-detect system resources
-TOTAL_RAM=$(free -m | awk 'NR==2{print $2}')
-if [ "$TOTAL_RAM" -lt 8192 ]; then
-    MINIKUBE_CPUS=2
-    MINIKUBE_MEMORY=4096
-    log "Low memory system detected: Using 2 CPUs, 4GB RAM"
-else
-    MINIKUBE_CPUS=4
-    MINIKUBE_MEMORY=6144
-    log "Sufficient memory: Using 4 CPUs, 6GB RAM"
-fi
-
-############################################
 # COLORS
 ############################################
 
@@ -55,7 +29,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 ############################################
-# LOGGING
+# LOGGING FUNCTIONS
 ############################################
 
 log() {
@@ -82,6 +56,32 @@ step() {
 cmd() {
     echo -e "${CYAN}[CMD]${NC} $1"
 }
+
+############################################
+# CONFIGURATION
+############################################
+
+CLUSTER_NAME="eduai-cluster"
+NAMESPACE="eduai"
+MONITORING_NAMESPACE="monitoring"
+DOMAIN="ailearn.duckdns.org"
+DOCKER_USERNAME="bayarmaa"
+
+FRONTEND_IMAGE="$DOCKER_USERNAME/eduai-frontend:latest"
+BACKEND_IMAGE="$DOCKER_USERNAME/eduai-backend:latest"
+AI_IMAGE="$DOCKER_USERNAME/eduai-ai-service:latest"
+
+# Auto-detect system resources
+TOTAL_RAM=$(free -m | awk 'NR==2{print $2}')
+if [ "$TOTAL_RAM" -lt 8192 ]; then
+    MINIKUBE_CPUS=2
+    MINIKUBE_MEMORY=4096
+    log "Low memory system detected: Using 2 CPUs, 4GB RAM"
+else
+    MINIKUBE_CPUS=4
+    MINIKUBE_MEMORY=6144
+    log "Sufficient memory: Using 4 CPUs, 6GB RAM"
+fi
 
 show_banner() {
     echo -e "${CYAN}"
