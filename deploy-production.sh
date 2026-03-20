@@ -195,20 +195,47 @@ start_cluster() {
     # Wait for cluster to be ready and set context
     log "Waiting for cluster to be ready..."
     local retries=0
-    local max_retries=30
+    local max_retries=60  # Increased to 5 minutes
+    
     while [ $retries -lt $max_retries ]; do
-        if minikube status -p $CLUSTER_NAME | grep -q "Running"; then
+        # Check minikube status
+        local status_output=$(minikube status -p $CLUSTER_NAME 2>/dev/null || echo "not_running")
+        log "Current status: $status_output"
+        
+        if echo "$status_output" | grep -q "Running"; then
             log "Cluster is running, setting context..."
-            kubectl config use-context $CLUSTER_NAME || true
-            break
+            if kubectl config use-context $CLUSTER_NAME; then
+                log "Context set successfully"
+                break
+            else
+                log "Failed to set context, retrying..."
+            fi
+        elif echo "$status_output" | grep -q "Starting"; then
+            log "Cluster is still starting..."
+        elif echo "$status_output" | grep -q "Stopped"; then
+            log "Cluster is stopped, attempting to start..."
+            minikube start -p $CLUSTER_NAME || true
         fi
+        
         retries=$((retries + 1))
-        log "Waiting for cluster... ($retries/$max_retries)"
-        sleep 5
+        if [ $retries -lt $max_retries ]; then
+            log "Waiting for cluster... ($retries/$max_retries)"
+            sleep 5
+        fi
     done
     
     if [ $retries -eq $max_retries ]; then
-        fail "Cluster failed to start within timeout"
+        log "Final status check:"
+        minikube status -p $CLUSTER_NAME || log "Status check failed"
+        log "Docker daemon status:"
+        docker info | head -5 || log "Docker info failed"
+        fail "Cluster failed to start within timeout (5 minutes). Check Docker daemon and system resources."
+    fi
+    
+    # Verify kubectl connectivity
+    log "Verifying kubectl connectivity..."
+    if ! kubectl cluster-info &>/dev/null; then
+        fail "kubectl cannot connect to cluster"
     fi
     
     # Connect Docker to Minikube
