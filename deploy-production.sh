@@ -190,9 +190,16 @@ start_cluster() {
     minikube delete -p $CLUSTER_NAME || true
     
     log "Creating fresh cluster..."
-    if ! cmd "minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker"; then
-        fail "Minikube start command failed"
+    minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker
+    START_EXIT_CODE=$?
+    
+    if [ $START_EXIT_CODE -ne 0 ]; then
+        fail "Minikube start command failed with exit code $START_EXIT_CODE. Check Docker daemon and system resources."
     fi
+    
+    # Wait a moment for cluster to initialize
+    log "Waiting for cluster initialization..."
+    sleep 10
     
     # Wait for all components to be ready
     log "Waiting for Minikube components to be ready..."
