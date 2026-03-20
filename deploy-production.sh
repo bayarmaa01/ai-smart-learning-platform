@@ -192,49 +192,33 @@ start_cluster() {
     log "Creating fresh cluster..."
     cmd "minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker"
     
-    # Wait for cluster to be ready and set context
-    log "Waiting for cluster to be ready..."
-    local retries=0
-    local max_retries=60  # Increased to 5 minutes
-    
-    while [ $retries -lt $max_retries ]; do
-        # Check minikube status
-        local status_output=$(minikube status -p $CLUSTER_NAME 2>/dev/null || echo "not_running")
-        log "Current status: $status_output"
+    # Wait for all components to be ready
+    log "Waiting for Minikube components to be ready..."
+    for i in {1..30}; do
+        STATUS=$(minikube status -p $CLUSTER_NAME --format='{{.Host}},{{.Kubelet}},{{.APIServer}}' 2>/dev/null)
         
-        if echo "$status_output" | grep -q "Running"; then
-            log "Cluster is running, setting context..."
-            if kubectl config use-context $CLUSTER_NAME; then
-                log "Context set successfully"
-                break
-            else
-                log "Failed to set context, retrying..."
-            fi
-        elif echo "$status_output" | grep -q "Starting"; then
-            log "Cluster is still starting..."
-        elif echo "$status_output" | grep -q "Stopped"; then
-            log "Cluster is stopped, attempting to start..."
-            minikube start -p $CLUSTER_NAME || true
+        if echo "$STATUS" | grep -q "Running,Running,Running"; then
+            success "Minikube cluster is ready"
+            break
         fi
         
-        retries=$((retries + 1))
-        if [ $retries -lt $max_retries ]; then
-            log "Waiting for cluster... ($retries/$max_retries)"
-            sleep 5
-        fi
+        log "Waiting for cluster... ($i/30)"
+        sleep 5
     done
     
-    if [ $retries -eq $max_retries ]; then
-        log "Final status check:"
-        minikube status -p $CLUSTER_NAME || log "Status check failed"
-        log "Docker daemon status:"
-        docker info | head -5 || log "Docker info failed"
-        fail "Cluster failed to start within timeout (5 minutes). Check Docker daemon and system resources."
+    # Check if cluster is ready
+    FINAL_STATUS=$(minikube status -p $CLUSTER_NAME --format='{{.Host}},{{.Kubelet}},{{.APIServer}}' 2>/dev/null)
+    if ! echo "$FINAL_STATUS" | grep -q "Running,Running,Running"; then
+        fail "Minikube cluster failed to start within timeout"
     fi
+    
+    # Set kubectl context
+    log "Setting kubectl context..."
+    kubectl config use-context $CLUSTER_NAME
     
     # Verify kubectl connectivity
     log "Verifying kubectl connectivity..."
-    if ! kubectl cluster-info &>/dev/null; then
+    if ! kubectl get nodes &>/dev/null; then
         fail "kubectl cannot connect to cluster"
     fi
     
