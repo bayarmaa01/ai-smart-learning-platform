@@ -192,8 +192,24 @@ start_cluster() {
     log "Creating fresh cluster..."
     cmd "minikube start -p $CLUSTER_NAME --driver=docker --memory=$MINIKUBE_MEMORY --cpus=$MINIKUBE_CPUS --disk-size=50g --kubernetes-version=v1.28.0 --container-runtime=docker"
     
-    # Set kubectl context
-    kubectl config use-context $CLUSTER_NAME
+    # Wait for cluster to be ready and set context
+    log "Waiting for cluster to be ready..."
+    local retries=0
+    local max_retries=30
+    while [ $retries -lt $max_retries ]; do
+        if minikube status -p $CLUSTER_NAME | grep -q "Running"; then
+            log "Cluster is running, setting context..."
+            kubectl config use-context $CLUSTER_NAME || true
+            break
+        fi
+        retries=$((retries + 1))
+        log "Waiting for cluster... ($retries/$max_retries)"
+        sleep 5
+    done
+    
+    if [ $retries -eq $max_retries ]; then
+        fail "Cluster failed to start within timeout"
+    fi
     
     # Connect Docker to Minikube
     eval $(minikube -p $CLUSTER_NAME docker-env)
