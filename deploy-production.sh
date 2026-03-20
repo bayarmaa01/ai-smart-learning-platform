@@ -195,20 +195,23 @@ start_cluster() {
     # Wait for all components to be ready
     log "Waiting for Minikube components to be ready..."
     for i in {1..30}; do
-        STATUS=$(minikube status -p $CLUSTER_NAME --format='{{.Host}},{{.Kubelet}},{{.APIServer}}' 2>/dev/null)
+        STATUS_OUTPUT=$(minikube status -p $CLUSTER_NAME 2>/dev/null || echo "not_running")
+        log "Status check ($i/30): $STATUS_OUTPUT"
         
-        if echo "$STATUS" | grep -q "Running,Running,Running"; then
-            success "Minikube cluster is ready"
-            break
+        if echo "$STATUS_OUTPUT" | grep -q "Running"; then
+            # Additional check for all components
+            if echo "$STATUS_OUTPUT" | grep -q "host: Running" && echo "$STATUS_OUTPUT" | grep -q "kubelet: Running" && echo "$STATUS_OUTPUT" | grep -q "apiserver: Running"; then
+                success "Minikube cluster is ready"
+                break
+            fi
         fi
         
-        log "Waiting for cluster... ($i/30)"
         sleep 5
     done
     
-    # Check if cluster is ready
-    FINAL_STATUS=$(minikube status -p $CLUSTER_NAME --format='{{.Host}},{{.Kubelet}},{{.APIServer}}' 2>/dev/null)
-    if ! echo "$FINAL_STATUS" | grep -q "Running,Running,Running"; then
+    # Final status check
+    FINAL_STATUS=$(minikube status -p $CLUSTER_NAME 2>/dev/null || echo "not_running")
+    if ! echo "$FINAL_STATUS" | grep -q "Running"; then
         fail "Minikube cluster failed to start within timeout"
     fi
     
