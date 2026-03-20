@@ -20,7 +20,7 @@ CLUSTER_NAME="eduai-cluster"
 NAMESPACE="eduai"
 MONITORING_NAMESPACE="monitoring"
 DOMAIN="ailearn.duckdns.org"
-TUNNEL_ID="YOUR_TUNNEL_ID_HERE"
+TUNNEL_ID="dbea55ba-3659-4dd7-ac66-67f900defbfd"
 CLOUDFLARED_CONFIG_DIR="$HOME/.cloudflared"
 CLOUDFLARED_LOG_DIR="/var/log/cloudflared"
 
