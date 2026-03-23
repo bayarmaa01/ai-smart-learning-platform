@@ -225,8 +225,8 @@ install_argocd() {
     # Create namespace
     kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
     
-    # Install ArgoCD
-    retry 3 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    # Install ArgoCD core only (without ApplicationSet to avoid annotation size issue)
+    retry 3 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/core-install.yaml
     
     # Patch service to NodePort
     kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "NodePort"}}'
@@ -249,16 +249,24 @@ install_monitoring() {
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm repo update
     
-    # Install monitoring stack
+    # Install monitoring stack with minimal config for low resources
     helm install monitoring prometheus-community/kube-prometheus-stack \
         --namespace monitoring \
         --create-namespace \
         --set grafana.service.type=NodePort \
         --set prometheus.service.type=NodePort \
         --set alertmanager.enabled=false \
-        --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=8Gi \
-        --set grafana.persistence.storage=2Gi \
-        --set grafana.persistence.enabled=true
+        --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=4Gi \
+        --set grafana.persistence.storage=1Gi \
+        --set grafana.persistence.enabled=true \
+        --set kube-state-metrics.enabled=false \
+        --set prometheus-node-exporter.enabled=false \
+        --set prometheusOperator.enabled=true \
+        --set defaultRules.enabled=false \
+        --set kubelet.enabled=false \
+        --set kubeControllerManager.enabled=false \
+        --set kubeScheduler.enabled=false \
+        --set kubeProxy.enabled=false
     
     # Wait for monitoring to be ready
     log "Waiting for monitoring stack to be ready..."
