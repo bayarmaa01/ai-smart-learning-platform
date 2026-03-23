@@ -10,7 +10,7 @@ global:
 # ============================================================
 # Backend
 # ============================================================
-backend: bayarmaa/eduai-backend:c8b6f36e9f2376a1f091e5e43ba59cdbe2c007e9
+backend: bayarmaa/eduai-backend:4d3025e00ea979cbe3f4750964f2d93696a44511
   enabled: true
   replicaCount: 3
   image:
@@ -41,7 +41,7 @@ backend: bayarmaa/eduai-backend:c8b6f36e9f2376a1f091e5e43ba59cdbe2c007e9
 # ============================================================
 # AI Service
 # ============================================================
-aiService: bayarmaa/eduai-ai-service:c8b6f36e9f2376a1f091e5e43ba59cdbe2c007e9
+aiService: bayarmaa/eduai-ai-service:4d3025e00ea979cbe3f4750964f2d93696a44511
   enabled: true
   replicaCount: 2
   image:
@@ -72,7 +72,7 @@ aiService: bayarmaa/eduai-ai-service:c8b6f36e9f2376a1f091e5e43ba59cdbe2c007e9
 # ============================================================
 # Frontend
 # ============================================================
-frontend: bayarmaa/eduai-frontend:c8b6f36e9f2376a1f091e5e43ba59cdbe2c007e9
+frontend: bayarmaa/eduai-frontend:4d3025e00ea979cbe3f4750964f2d93696a44511
   enabled: true
   replicaCount: 2
   image:
