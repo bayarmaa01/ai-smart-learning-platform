@@ -157,7 +157,7 @@ spec:
     app: frontend
   type: NodePort
   ports:
-  - port: 80
+  - port: 3000
     targetPort: 80
     nodePort: 30007
 EOF
