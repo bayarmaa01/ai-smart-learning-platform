@@ -229,11 +229,11 @@ install_argocd() {
     log "Installing ArgoCD core components..."
     
     # Install CRDs first
-    retry 3 kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/crds/application-crd.yaml
-    retry 3 kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/crds/appproject-crd.yaml
+    retry 3 kubectl apply --validate=false -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/crds/application-crd.yaml
+    retry 3 kubectl apply --validate=false -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/crds/appproject-crd.yaml
     
     # Install core components
-    retry 3 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/install.yaml
+    retry 3 kubectl apply --validate=false -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.4/manifests/install.yaml
     
     # Patch service to NodePort
     kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "NodePort"}}'
