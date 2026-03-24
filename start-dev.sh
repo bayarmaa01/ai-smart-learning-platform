@@ -26,7 +26,8 @@ error() {
 start_minikube() {
     log "Checking Minikube status..."
     
-    if minikube status -p eduai-cluster | grep -q "Running"; then
+    # Check if Minikube profile exists and is running
+    if minikube status -p eduai-cluster 2>/dev/null | grep -q "Running"; then
         success "Minikube is already running"
     else
         log "Starting Minikube cluster..."
@@ -86,6 +87,11 @@ recover_pods() {
     
     # Check for CrashLoopBackOff pods
     crashloop_pods=$(kubectl get pods -A --no-headers 2>/dev/null | grep -c "CrashLoopBackOff" || echo "0")
+    
+    # Handle empty result properly
+    if [ -z "$crashloop_pods" ]; then
+        crashloop_pods="0"
+    fi
     
     if [ "$crashloop_pods" -gt 0 ]; then
         log "Found $crashloop_pods pods in CrashLoopBackOff, restarting deployments..."
