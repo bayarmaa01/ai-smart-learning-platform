@@ -131,13 +131,27 @@ print_urls() {
     echo "🚀 PLATFORM:"
     echo "https://ailearn.duckdns.org"
     echo ""
+    echo "🔧 INTERNAL SERVICES:"
+    
+    # Get Minikube IP
+    MINIKUBE_IP=$(minikube ip -p eduai-cluster)
+    
+    # Get ArgoCD NodePort
+    ARGOCD_PORT=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30007")
+    
+    # Get Grafana NodePort
+    GRAFANA_PORT=$(kubectl get svc monitoring-grafana -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30008")
+    
+    # Get Prometheus NodePort
+    PROMETHEUS_PORT=$(kubectl get svc monitoring-kube-prometheus-prometheus -n monitoring -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || echo "30009")
+    
     echo "⚙️ ARGOCD:"
     echo "http://$MINIKUBE_IP:$ARGOCD_PORT"
-    echo ""
+    
     echo "📊 GRAFANA:"
     echo "http://$MINIKUBE_IP:$GRAFANA_PORT"
     echo "   (admin/admin123)"
-    echo ""
+    
     echo "📈 PROMETHEUS:"
     echo "http://$MINIKUBE_IP:$PROMETHEUS_PORT"
     echo "----------------------------------"
@@ -146,6 +160,11 @@ print_urls() {
     echo "kubectl get pods -A"
     echo "kubectl get svc -A"
     echo "minikube service list"
+    echo "   ./access-services.sh  # For detailed access info"
+    echo ""
+    echo "🎯 PORT FORWARDING:"
+    echo "kubectl port-forward svc/frontend -n eduai 3000:3000"
+    echo "kubectl port-forward svc/backend -n eduai 5000:5000"
     echo ""
 }
 
