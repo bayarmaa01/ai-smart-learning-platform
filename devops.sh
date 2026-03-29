@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # =============================================================================
-# 🚀 AI SMART LEARNING PLATFORM - FULL DEPLOYMENT SCRIPT
+# 🚀 AI SMART LEARNING PLATFORM - FULL AUTOMATED DEPLOYMENT
 # =============================================================================
 
 # Colors for output
@@ -12,6 +12,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Configuration
+DOMAIN="ailearn.duckdns.org"
+TUNNEL_CONFIG_DIR="$HOME/.cloudflared"
+FRONTEND_NODEPORT="30007"
+BACKEND_NODEPORT="30008"
 
 # Logging functions
 log_info() { echo -e "${BLUE}ℹ️  INFO: $1${NC}"; }
@@ -62,7 +68,7 @@ validate_system() {
     log_success "RAM: ${total_ram}GB ✓"
     
     # Check required tools
-    local tools=("docker" "kubectl" "minikube" "helm")
+    local tools=("docker" "kubectl" "minikube" "helm" "cloudflared")
     for tool in "${tools[@]}"; do
         if ! command -v $tool &> /dev/null; then
             log_error "$tool not found. Please install it first."
@@ -202,7 +208,7 @@ spec:
   ports:
   - port: 3000
     targetPort: 80
-    nodePort: 30007
+    nodePort: $FRONTEND_NODEPORT
 EOF
     
     # Deploy backend
@@ -261,7 +267,7 @@ spec:
   ports:
   - port: 5000
     targetPort: 5000
-    nodePort: 30008
+    nodePort: $BACKEND_NODEPORT
 EOF
     
     # Wait for deployments to be ready
@@ -272,62 +278,81 @@ EOF
 }
 
 # =============================================================================
-# STEP 5: INSTALL ARGOCD
+# STEP 5: CLOUDFLARE TUNNEL SETUP
 # =============================================================================
-install_argocd() {
-    log_info "Installing ArgoCD..."
+setup_cloudflare_tunnel() {
+    log_info "Setting up Cloudflare Tunnel..."
     
-    # Add ArgoCD Helm repository
-    helm repo add argo https://argoproj.github.io/argo-helm
-    helm repo update
+    # Create config directory
+    mkdir -p "$TUNNEL_CONFIG_DIR"
     
-    # Install ArgoCD
-    helm upgrade --install argocd argo/argo-cd \
-        --namespace argocd \
-        --create-namespace \
-        --set server.service.type=NodePort \
-        --set server.service.nodePorts.http=32434 \
-        --set configs.secret.argocdServerAdminPassword='$2a$10$1V8M7L9Y5N8K2J6X5Z4Q9O1P3R8T7W6U5I4H3G2F1D0E9C8B7A6' \
-        --wait
+    # Auto-detect or use existing tunnel
+    local tunnel_id=""
+    local tunnel_file=""
     
-    # Wait for ArgoCD to be ready
-    retry 10 kubectl wait --for=condition=Ready pods -n argocd -l app.kubernetes.io/name=argocd-server --timeout=300s
+    # Look for existing tunnel credentials
+    for file in "$TUNNEL_CONFIG_DIR"/*.json; do
+        if [ -f "$file" ]; then
+            tunnel_id=$(basename "$file" .json)
+            tunnel_file="$file"
+            log_info "Found existing tunnel: $tunnel_id"
+            break
+        fi
+    done
     
-    log_success "ArgoCD installed"
+    # If no tunnel found, create a new one
+    if [ -z "$tunnel_id" ]; then
+        log_warning "No existing tunnel found. Please create a tunnel manually:"
+        echo "1. Go to Cloudflare Dashboard > Zero Trust > Networks > Tunnels"
+        echo "2. Click 'Create tunnel' > 'Cloudflared tunnel'"
+        echo "3. Save the tunnel ID and download credentials file"
+        echo "4. Place credentials file in: $TUNNEL_CONFIG_DIR/<tunnel-id>.json"
+        log_error "Tunnel setup required. Please run script again after creating tunnel."
+        exit 1
+    fi
+    
+    # Generate tunnel configuration
+    log_info "Generating tunnel configuration..."
+    cat > "$TUNNEL_CONFIG_DIR/config.yml" <<EOF
+tunnel: $tunnel_id
+credentials-file: $tunnel_file
+
+ingress:
+  - hostname: $DOMAIN
+    service: http://localhost:$FRONTEND_NODEPORT
+  - service: http_status:404
+EOF
+    
+    log_success "Tunnel configuration created: $TUNNEL_CONFIG_DIR/config.yml"
+    
+    # Start tunnel
+    log_info "Starting Cloudflare Tunnel..."
+    
+    # Kill existing tunnel processes
+    pkill -f "cloudflared tunnel run" || true
+    
+    # Start tunnel in background
+    nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
+    local tunnel_pid=$!
+    
+    # Wait for tunnel to start
+    sleep 5
+    
+    # Check if tunnel is running
+    if kill -0 $tunnel_pid 2>/dev/null; then
+        log_success "Cloudflare Tunnel started (PID: $tunnel_pid)"
+        echo $tunnel_pid > "$TUNNEL_CONFIG_DIR/tunnel.pid"
+    else
+        log_error "Failed to start Cloudflare Tunnel"
+        tail -20 "$TUNNEL_CONFIG_DIR/tunnel.log"
+        exit 1
+    fi
 }
 
 # =============================================================================
-# STEP 6: INSTALL MONITORING (LIGHTWEIGHT)
+# STEP 6: SELF-HEALING
 # =============================================================================
-install_monitoring() {
-    log_info "Installing Grafana (lightweight monitoring)..."
-    
-    # Add Grafana Helm repository
-    helm repo add grafana https://grafana.github.io/helm-charts
-    helm repo update
-    
-    # Install Grafana only (no heavy Prometheus)
-    helm upgrade --install grafana grafana/grafana \
-        --namespace monitoring \
-        --create-namespace \
-        --set service.type=NodePort \
-        --set service.nodePort=31385 \
-        --set adminPassword='admin123' \
-        --set persistence.enabled=false \
-        --set sidecar.datasources.enabled=false \
-        --set sidecar.dashboards.enabled=false \
-        --wait
-    
-    # Wait for Grafana to be ready
-    retry 10 kubectl wait --for=condition=Ready pods -n monitoring -l app.kubernetes.io/name=grafana --timeout=300s
-    
-    log_success "Grafana installed"
-}
-
-# =============================================================================
-# STEP 7: SELF-HEALING
-# =============================================================================
-self_healing() {
+setup_self_healing() {
     log_info "Setting up self-healing..."
     
     # Create a self-healing script as a ConfigMap
@@ -355,9 +380,46 @@ data:
             kubectl rollout restart "\$deployment" -n eduai
         fi
     done
+    
+    # Restart tunnel if stopped
+    if [ ! -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] || ! kill -0 \$(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        echo "Restarting Cloudflare Tunnel"
+        nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
+        echo \$! > "$TUNNEL_CONFIG_DIR/tunnel.pid"
+    fi
 EOF
     
     log_success "Self-healing configured"
+}
+
+# =============================================================================
+# STEP 7: VERIFY SYSTEM
+# =============================================================================
+verify_system() {
+    log_info "Verifying system deployment..."
+    
+    # Check Minikube
+    if ! minikube status -p eduai-cluster | grep -q "Running"; then
+        log_error "Minikube is not running"
+        exit 1
+    fi
+    
+    # Check pods
+    local frontend_pods=$(kubectl get pods -n eduai -l app=frontend --no-headers | wc -l)
+    local backend_pods=$(kubectl get pods -n eduai -l app=backend --no-headers | wc -l)
+    
+    if [ $frontend_pods -eq 0 ] || [ $backend_pods -eq 0 ]; then
+        log_error "Pods are not running"
+        exit 1
+    fi
+    
+    # Check tunnel
+    if [ ! -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] || ! kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        log_error "Cloudflare Tunnel is not running"
+        exit 1
+    fi
+    
+    log_success "System verification passed"
 }
 
 # =============================================================================
@@ -366,63 +428,63 @@ EOF
 output_access_info() {
     log_info "Generating access information..."
     
+    echo ""
+    echo "=== 🚀 SYSTEM READY ==="
+    echo ""
+    
+    echo "🌐 Domain:"
+    echo "https://$DOMAIN"
+    echo ""
+    
+    echo "Status:"
+    echo "✅ Tunnel: RUNNING"
+    echo "✅ Pods: RUNNING"
+    echo "✅ Minikube: RUNNING"
+    echo ""
+    
+    echo "📱 Local Access:"
     local minikube_ip=$(minikube ip -p eduai-cluster)
-    
-    echo ""
-    echo "🚀 PLATFORM READY"
-    echo "=================="
-    echo ""
-    
-    echo "📱 Frontend:"
-    echo "   Local: http://$minikube_ip:30007"
-    echo "   Port-forward: kubectl port-forward svc/frontend -n eduai 3000:3000"
-    echo ""
-    
-    echo "🔧 Backend:"
-    echo "   Local: http://$minikube_ip:30008"
-    echo "   Port-forward: kubectl port-forward svc/backend -n eduai 5000:5000"
-    echo ""
-    
-    echo "⚙️ ArgoCD:"
-    echo "   URL: http://$minikube_ip:32434"
-    echo "   Username: admin"
-    echo "   Password: admin"
-    echo ""
-    
-    echo "📊 Grafana:"
-    echo "   URL: http://$minikube_ip:31385"
-    echo "   Username: admin"
-    echo "   Password: admin123"
+    echo "Frontend: http://$minikube_ip:$FRONTEND_NODEPORT"
+    echo "Backend:  http://$minikube_ip:$BACKEND_NODEPORT"
     echo ""
     
     echo "🔍 System Status:"
     echo "==============="
-    kubectl get pods -A
+    kubectl get pods -n eduai
     echo ""
     
     echo "🌐 Services:"
     echo "==========="
-    kubectl get svc -A
+    kubectl get svc -n eduai
+    echo ""
+    
+    echo "📋 Management Commands:"
+    echo "======================"
+    echo "Check tunnel logs: tail -f $TUNNEL_CONFIG_DIR/tunnel.log"
+    echo "Restart tunnel: pkill -f cloudflared && ./run.sh"
+    echo "Check pods: kubectl get pods -n eduai"
+    echo "Stop system: pkill -f cloudflared && minikube stop -p eduai-cluster"
     echo ""
     
     log_success "Deployment completed successfully!"
+    log_info "Open https://$DOMAIN in your browser"
 }
 
 # =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 main() {
-    echo "🚀 AI Smart Learning Platform - Full Deployment"
-    echo "==============================================="
+    echo "🚀 AI Smart Learning Platform - Full Automated Deployment"
+    echo "========================================================="
     echo ""
     
     validate_system
     setup_minikube
     build_images
     deploy_kubernetes
-    install_argocd
-    install_monitoring
-    self_healing
+    setup_cloudflare_tunnel
+    setup_self_healing
+    verify_system
     output_access_info
 }
 

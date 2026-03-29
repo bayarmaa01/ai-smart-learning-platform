@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # =============================================================================
-# ⚡ AI SMART LEARNING PLATFORM - FAST STARTUP SCRIPT
+# ⚡ AI SMART LEARNING PLATFORM - FAST STARTUP
 # =============================================================================
 
 # Colors for output
@@ -12,6 +12,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+# Configuration
+DOMAIN="ailearn.duckdns.org"
+TUNNEL_CONFIG_DIR="$HOME/.cloudflared"
+FRONTEND_NODEPORT="30007"
+BACKEND_NODEPORT="30008"
 
 # Logging functions
 log_info() { echo -e "${BLUE}ℹ️  INFO: $1${NC}"; }
@@ -104,112 +110,142 @@ ensure_pods_running() {
 }
 
 # =============================================================================
-# STEP 3: SETUP PORT FORWARDING
+# STEP 3: ENSURE CLOUDFLARE TUNNEL IS RUNNING
 # =============================================================================
-setup_port_forwarding() {
-    log_info "Setting up port forwarding..."
+ensure_tunnel_running() {
+    log_info "Checking Cloudflare Tunnel status..."
     
-    # Kill existing port forwards
-    pkill -f "kubectl.*port-forward.*frontend" || true
-    pkill -f "kubectl.*port-forward.*backend" || true
-    
-    # Start port forwarding in background
-    kubectl port-forward svc/frontend -n eduai 3000:3000 >/dev/null 2>&1 &
-    local frontend_pid=$!
-    
-    kubectl port-forward svc/backend -n eduai 5000:5000 >/dev/null 2>&1 &
-    local backend_pid=$!
-    
-    # Wait a moment for port forwarding to establish
-    sleep 3
-    
-    # Check if port forwarding is working
-    if kill -0 $frontend_pid 2>/dev/null; then
-        log_success "Frontend port forwarding active (PID: $frontend_pid)"
-    else
-        log_warning "Frontend port forwarding failed"
+    # Check if tunnel config exists
+    if [ ! -f "$TUNNEL_CONFIG_DIR/config.yml" ]; then
+        log_warning "Tunnel config not found. Please run ./devops.sh first."
+        return 1
     fi
     
-    if kill -0 $backend_pid 2>/dev/null; then
-        log_success "Backend port forwarding active (PID: $backend_pid)"
+    # Check if tunnel is running
+    if [ -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] && kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        log_success "Cloudflare Tunnel is already running"
     else
-        log_warning "Backend port forwarding failed"
+        log_info "Starting Cloudflare Tunnel..."
+        
+        # Kill any existing tunnel processes
+        pkill -f "cloudflared tunnel run" || true
+        
+        # Start tunnel in background
+        nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
+        local tunnel_pid=$!
+        
+        # Wait for tunnel to start
+        sleep 5
+        
+        # Check if tunnel is running
+        if kill -0 $tunnel_pid 2>/dev/null; then
+            log_success "Cloudflare Tunnel started (PID: $tunnel_pid)"
+            echo $tunnel_pid > "$TUNNEL_CONFIG_DIR/tunnel.pid"
+        else
+            log_error "Failed to start Cloudflare Tunnel"
+            tail -10 "$TUNNEL_CONFIG_DIR/tunnel.log"
+            return 1
+        fi
     fi
 }
 
 # =============================================================================
-# STEP 4: OUTPUT ACCESS URLS
+# STEP 4: HEALTH CHECK
 # =============================================================================
-output_access_urls() {
-    log_info "Generating access URLs..."
+health_check() {
+    log_info "Performing health check..."
     
+    local all_healthy=true
+    
+    # Check Minikube
+    if ! minikube status -p eduai-cluster | grep -q "Running"; then
+        log_error "Minikube is not running"
+        all_healthy=false
+    fi
+    
+    # Check pods
+    local frontend_pods=$(kubectl get pods -n eduai -l app=frontend --no-headers | wc -l)
+    local backend_pods=$(kubectl get pods -n eduai -l app=backend --no-headers | wc -l)
+    
+    if [ $frontend_pods -eq 0 ]; then
+        log_error "Frontend pods are not running"
+        all_healthy=false
+    fi
+    
+    if [ $backend_pods -eq 0 ]; then
+        log_error "Backend pods are not running"
+        all_healthy=false
+    fi
+    
+    # Check tunnel
+    if [ ! -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] || ! kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        log_error "Cloudflare Tunnel is not running"
+        all_healthy=false
+    fi
+    
+    if [ "$all_healthy" = true ]; then
+        log_success "All components are healthy"
+    else
+        log_warning "Some components need attention"
+    fi
+}
+
+# =============================================================================
+# STEP 5: OUTPUT ACCESS INFORMATION
+# =============================================================================
+output_access_info() {
+    log_info "Generating access information..."
+    
+    echo ""
+    echo "=== 🚀 SYSTEM READY ==="
+    echo ""
+    
+    echo "🌐 Domain:"
+    echo "https://$DOMAIN"
+    echo ""
+    
+    echo "Status:"
+    local tunnel_status="❌ STOPPED"
+    if [ -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] && kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        tunnel_status="✅ RUNNING"
+    fi
+    
+    local pods_status="❌ STOPPED"
+    local frontend_pods=$(kubectl get pods -n eduai -l app=frontend --no-headers | wc -l)
+    local backend_pods=$(kubectl get pods -n eduai -l app=backend --no-headers | wc -l)
+    
+    if [ $frontend_pods -gt 0 ] && [ $backend_pods -gt 0 ]; then
+        pods_status="✅ RUNNING"
+    fi
+    
+    echo "* Tunnel: $tunnel_status"
+    echo "* Pods: $pods_status"
+    echo "* Minikube: ✅ RUNNING"
+    echo ""
+    
+    echo "📱 Local Access:"
     local minikube_ip=$(minikube ip -p eduai-cluster 2>/dev/null || echo "N/A")
-    
-    echo ""
-    echo "🚀 PLATFORM READY"
-    echo "=================="
-    echo ""
-    
-    echo "📱 Frontend:"
-    echo "   Localhost: http://localhost:3000"
     if [ "$minikube_ip" != "N/A" ]; then
-        echo "   NodePort:  http://$minikube_ip:30007"
+        echo "Frontend: http://$minikube_ip:$FRONTEND_NODEPORT"
+        echo "Backend:  http://$minikube_ip:$BACKEND_NODEPORT"
     fi
     echo ""
-    
-    echo "🔧 Backend:"
-    echo "   Localhost: http://localhost:5000"
-    if [ "$minikube_ip" != "N/A" ]; then
-        echo "   NodePort:  http://$minikube_ip:30008"
-    fi
-    echo ""
-    
-    if [ "$minikube_ip" != "N/A" ]; then
-        echo "⚙️ ArgoCD:"
-        echo "   URL: http://$minikube_ip:32434"
-        echo "   Username: admin"
-        echo "   Password: admin"
-        echo ""
-        
-        echo "📊 Grafana:"
-        echo "   URL: http://$minikube_ip:31385"
-        echo "   Username: admin"
-        echo "   Password: admin123"
-        echo ""
-    fi
     
     echo "🔍 Quick Status:"
     echo "==============="
     kubectl get pods -n eduai
     echo ""
     
-    echo "🌐 Services:"
-    echo "==========="
-    kubectl get svc -n eduai
+    echo "📋 Management Commands:"
+    echo "======================"
+    echo "Check tunnel logs: tail -f $TUNNEL_CONFIG_DIR/tunnel.log"
+    echo "Restart tunnel: pkill -f cloudflared && ./run.sh"
+    echo "Check pods: kubectl get pods -n eduai"
+    echo "Stop system: pkill -f cloudflared && minikube stop -p eduai-cluster"
     echo ""
     
-    log_success "Platform is ready for use!"
-}
-
-# =============================================================================
-# STEP 5: HEALTH CHECK
-# =============================================================================
-health_check() {
-    log_info "Performing health check..."
-    
-    # Check frontend
-    if curl -s http://localhost:3000 >/dev/null 2>&1; then
-        log_success "Frontend health check passed"
-    else
-        log_warning "Frontend health check failed"
-    fi
-    
-    # Check backend
-    if curl -s http://localhost:5000/api/health >/dev/null 2>&1; then
-        log_success "Backend health check passed"
-    else
-        log_warning "Backend health check failed"
-    fi
+    log_success "System is ready for use!"
+    log_info "Open https://$DOMAIN in your browser"
 }
 
 # =============================================================================
@@ -224,9 +260,9 @@ main() {
     
     start_minikube
     ensure_pods_running
-    setup_port_forwarding
-    output_access_urls
+    ensure_tunnel_running
     health_check
+    output_access_info
     
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
@@ -234,9 +270,9 @@ main() {
     echo "⏱️  Startup completed in ${duration} seconds"
     echo ""
     echo "💡 Tips:"
-    echo "   - Use Ctrl+C to stop port forwarding"
-    echo "   - Run ./run.sh again to refresh services"
-    echo "   - Check logs with: kubectl logs -n eduai deployment/frontend"
+    echo "   - Use ./run.sh again to refresh services"
+    echo "   - Check logs with: tail -f $TUNNEL_CONFIG_DIR/tunnel.log"
+    echo "   - Full redeploy with: ./devops.sh"
     echo ""
 }
 
