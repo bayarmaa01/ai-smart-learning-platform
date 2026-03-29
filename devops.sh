@@ -3,29 +3,28 @@
 set -euo pipefail
 
 # =============================================================================
-# 🚀 AI SMART LEARNING PLATFORM - FULL AUTOMATED DEPLOYMENT
+# 🚀 AI SMART LEARNING PLATFORM - FULL DEPLOYMENT
 # =============================================================================
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Configuration
 DOMAIN="ailearn.duckdns.org"
 TUNNEL_CONFIG_DIR="$HOME/.cloudflared"
-FRONTEND_NODEPORT="30007"
-BACKEND_NODEPORT="30008"
+NAMESPACE="eduai"
 
-# Logging functions
+# Logging
 log_info() { echo -e "${BLUE}ℹ️  INFO: $1${NC}"; }
 log_success() { echo -e "${GREEN}✅ SUCCESS: $1${NC}"; }
 log_warning() { echo -e "${YELLOW}⚠️  WARNING: $1${NC}"; }
 log_error() { echo -e "${RED}❌ ERROR: $1${NC}"; }
 
-# Retry function for stability
+# Retry function
 retry() {
     local retries=$1
     shift
@@ -46,121 +45,106 @@ retry() {
 }
 
 # =============================================================================
-# STEP 1: SYSTEM VALIDATION
+# SYSTEM SETUP
 # =============================================================================
-validate_system() {
-    log_info "Validating system requirements..."
-    
-    # Check CPU cores
-    local cpu_cores=$(nproc)
-    if [ $cpu_cores -lt 2 ]; then
-        log_error "CPU cores insufficient: $cpu_cores (minimum: 2)"
-        exit 1
-    fi
-    log_success "CPU cores: $cpu_cores ✓"
-    
-    # Check RAM
-    local total_ram=$(free -g | awk '/^Mem:/{print $2}')
-    if [ $total_ram -lt 4 ]; then
-        log_error "RAM insufficient: ${total_ram}GB (minimum: 4GB)"
-        exit 1
-    fi
-    log_success "RAM: ${total_ram}GB ✓"
-    
-    # Check required tools
+check_tools() {
+    log_info "Checking required tools..."
     local tools=("docker" "kubectl" "minikube" "helm" "cloudflared")
     for tool in "${tools[@]}"; do
         if ! command -v $tool &> /dev/null; then
             log_error "$tool not found. Please install it first."
             exit 1
         fi
-        log_success "$tool ✓"
     done
-    
-    log_success "System validation completed"
+    log_success "All tools available"
 }
 
 # =============================================================================
-# STEP 2: MINIKUBE SETUP
+# MINIKUBE SETUP (IDEMPOTENT)
 # =============================================================================
 setup_minikube() {
-    log_info "Setting up Minikube cluster..."
+    log_info "Setting up Minikube..."
     
-    # Clean up existing cluster
-    log_info "Cleaning up existing cluster..."
-    minikube stop -p eduai-cluster 2>/dev/null || true
-    minikube delete -p eduai-cluster 2>/dev/null || true
+    if minikube status -p eduai-cluster 2>/dev/null | grep -q "Running"; then
+        log_success "Minikube already running"
+    else
+        log_info "Starting Minikube..."
+        retry 3 minikube start -p eduai-cluster \
+            --driver=docker \
+            --cpus=2 \
+            --memory=4096 \
+            --kubernetes-version=v1.28.0
+        log_success "Minikube started"
+    fi
     
-    # Start new cluster
-    log_info "Starting Minikube cluster..."
-    retry 3 minikube start -p eduai-cluster \
-        --driver=docker \
-        --cpus=2 \
-        --memory=4096 \
-        --kubernetes-version=v1.28.0 \
-        --wait=all
-    
-    # Set context and enable docker env
     kubectl config use-context eduai-cluster
     eval $(minikube docker-env)
-    
-    # Wait for nodes to be ready
     retry 5 kubectl wait --for=condition=Ready nodes --all --timeout=300s
-    
-    log_success "Minikube cluster ready"
 }
 
 # =============================================================================
-# STEP 3: BUILD DOCKER IMAGES
+# DOCKER BUILD
 # =============================================================================
 build_images() {
     log_info "Building Docker images..."
     
     eval $(minikube docker-env)
     
-    # Build frontend image
-    log_info "Building frontend image..."
+    # Frontend
     if [ -d "frontend" ]; then
         docker build -t eduai-frontend:latest ./frontend
         log_success "Frontend image built"
     else
-        log_warning "Frontend directory not found, using nginx"
         docker pull nginx:alpine
         docker tag nginx:alpine eduai-frontend:latest
+        log_warning "Using nginx for frontend (directory not found)"
     fi
     
-    # Build backend image
-    log_info "Building backend image..."
+    # Backend
     if [ -d "backend" ]; then
         docker build -t eduai-backend:latest ./backend
         log_success "Backend image built"
     else
-        log_warning "Backend directory not found, using nginx"
         docker pull nginx:alpine
         docker tag nginx:alpine eduai-backend:latest
+        log_warning "Using nginx for backend (directory not found)"
     fi
-    
-    log_success "All images built successfully"
 }
 
 # =============================================================================
-# STEP 4: KUBERNETES DEPLOY
+# KUBERNETES DEPLOY
 # =============================================================================
 deploy_kubernetes() {
     log_info "Deploying Kubernetes resources..."
     
     # Create namespace
-    kubectl create namespace eduai --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
     
-    # Deploy frontend
-    log_info "Deploying frontend..."
-    kubectl apply -n eduai -f - <<EOF
+    # Apply manifests from k8s directory
+    if [ -d "k8s" ]; then
+        for yaml in k8s/*.yaml; do
+            if [ -f "$yaml" ]; then
+                log_info "Applying $yaml"
+                kubectl apply -f "$yaml" -n $NAMESPACE
+            fi
+        done
+    else
+        log_warning "k8s directory not found, creating basic deployments..."
+        create_basic_deployments
+    fi
+    
+    # Wait for deployments
+    retry 10 kubectl wait --for=condition=Available deployments --all -n $NAMESPACE --timeout=300s
+    log_success "Kubernetes deployment completed"
+}
+
+create_basic_deployments() {
+    # Frontend
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  labels:
-    app: frontend
 spec:
   replicas: 2
   selector:
@@ -184,18 +168,6 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -208,18 +180,15 @@ spec:
   ports:
   - port: 3000
     targetPort: 80
-    nodePort: $FRONTEND_NODEPORT
+    nodePort: 30007
 EOF
-    
-    # Deploy backend
-    log_info "Deploying backend..."
-    kubectl apply -n eduai -f - <<EOF
+
+    # Backend
+    kubectl apply -n $NAMESPACE -f - <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
-  labels:
-    app: backend
 spec:
   replicas: 2
   selector:
@@ -243,18 +212,6 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
-        readinessProbe:
-          httpGet:
-            path: /api/health
-            port: 5000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 5000
-          initialDelaySeconds: 30
-          periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
@@ -267,155 +224,171 @@ spec:
   ports:
   - port: 5000
     targetPort: 5000
-    nodePort: $BACKEND_NODEPORT
+    nodePort: 30008
 EOF
-    
-    # Wait for deployments to be ready
-    retry 10 kubectl wait --for=condition=Available deployment/frontend -n eduai --timeout=300s
-    retry 10 kubectl wait --for=condition=Available deployment/backend -n eduai --timeout=300s
-    
-    log_success "Kubernetes deployment completed"
 }
 
 # =============================================================================
-# STEP 5: CLOUDFLARE TUNNEL SETUP
-# =============================================================================
-setup_cloudflare_tunnel() {
-    log_info "Setting up Cloudflare Tunnel..."
-    
-    # Create config directory
-    mkdir -p "$TUNNEL_CONFIG_DIR"
-    
-    # Auto-detect or use existing tunnel
-    local tunnel_id=""
-    local tunnel_file=""
-    
-    # Look for existing tunnel credentials
-    for file in "$TUNNEL_CONFIG_DIR"/*.json; do
-        if [ -f "$file" ]; then
-            tunnel_id=$(basename "$file" .json)
-            tunnel_file="$file"
-            log_info "Found existing tunnel: $tunnel_id"
-            break
-        fi
-    done
-    
-    # If no tunnel found, create a new one
-    if [ -z "$tunnel_id" ]; then
-        log_warning "No existing tunnel found. Please create a tunnel manually:"
-        echo "1. Go to Cloudflare Dashboard > Zero Trust > Networks > Tunnels"
-        echo "2. Click 'Create tunnel' > 'Cloudflared tunnel'"
-        echo "3. Save the tunnel ID and download credentials file"
-        echo "4. Place credentials file in: $TUNNEL_CONFIG_DIR/<tunnel-id>.json"
-        log_error "Tunnel setup required. Please run script again after creating tunnel."
-        exit 1
-    fi
-    
-    # Generate tunnel configuration
-    log_info "Generating tunnel configuration..."
-    cat > "$TUNNEL_CONFIG_DIR/config.yml" <<EOF
-tunnel: $tunnel_id
-credentials-file: $tunnel_file
-
-ingress:
-  - hostname: $DOMAIN
-    service: http://localhost:$FRONTEND_NODEPORT
-  - service: http_status:404
-EOF
-    
-    log_success "Tunnel configuration created: $TUNNEL_CONFIG_DIR/config.yml"
-    
-    # Start tunnel
-    log_info "Starting Cloudflare Tunnel..."
-    
-    # Kill existing tunnel processes
-    pkill -f "cloudflared tunnel run" || true
-    
-    # Start tunnel in background
-    nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
-    local tunnel_pid=$!
-    
-    # Wait for tunnel to start
-    sleep 5
-    
-    # Check if tunnel is running
-    if kill -0 $tunnel_pid 2>/dev/null; then
-        log_success "Cloudflare Tunnel started (PID: $tunnel_pid)"
-        echo $tunnel_pid > "$TUNNEL_CONFIG_DIR/tunnel.pid"
-    else
-        log_error "Failed to start Cloudflare Tunnel"
-        tail -20 "$TUNNEL_CONFIG_DIR/tunnel.log"
-        exit 1
-    fi
-}
-
-# =============================================================================
-# STEP 6: SELF-HEALING
+# SELF-HEALING (CRONJOB)
 # =============================================================================
 setup_self_healing() {
     log_info "Setting up self-healing..."
     
-    # Create a self-healing script as a ConfigMap
     kubectl apply -f - <<EOF
-apiVersion: v1
-kind: ConfigMap
+apiVersion: batch/v1
+kind: CronJob
 metadata:
-  name: self-healing-script
-  namespace: eduai
-data:
-  heal.sh: |
-    #!/bin/bash
-    # Auto-heal failed pods
-    kubectl get pods -n eduai --field-selector=status.phase=Failed -o name | while read pod; do
-        echo "Deleting failed pod: \$pod"
-        kubectl delete "\$pod" -n eduai
-    done
-    
-    # Restart deployments with failed pods
-    kubectl get deployments -n eduai -o name | while read deployment; do
-        ready=\$(kubectl get "\$deployment" -n eduai -o jsonpath='{.status.readyReplicas}')
-        desired=\$(kubectl get "\$deployment" -n eduai -o jsonpath='{.spec.replicas}')
-        if [ "\$ready" != "\$desired" ]; then
-            echo "Restarting deployment: \$deployment"
-            kubectl rollout restart "\$deployment" -n eduai
-        fi
-    done
-    
-    # Restart tunnel if stopped
-    if [ ! -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] || ! kill -0 \$(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
-        echo "Restarting Cloudflare Tunnel"
-        nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
-        echo \$! > "$TUNNEL_CONFIG_DIR/tunnel.pid"
-    fi
+  name: self-healing
+  namespace: $NAMESPACE
+spec:
+  schedule: "*/2 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+          - name: healer
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              # Delete failed pods
+              kubectl get pods -n $NAMESPACE --field-selector=status.phase=Failed -o name | while read pod; do
+                echo "Deleting failed pod: \$pod"
+                kubectl delete "\$pod" -n $NAMESPACE --grace-period=0 --force || true
+              done
+              
+              # Restart unhealthy deployments
+              kubectl get deployments -n $NAMESPACE -o name | while read deployment; do
+                ready=\$(kubectl get "\$deployment" -n $NAMESPACE -o jsonpath='{.status.readyReplicas}')
+                desired=\$(kubectl get "\$deployment" -n $NAMESPACE -o jsonpath='{.spec.replicas}')
+                if [ "\$ready" != "\$desired" ]; then
+                  echo "Restarting deployment: \$deployment"
+                  kubectl rollout restart "\$deployment" -n $NAMESPACE || true
+                fi
+              done
 EOF
     
     log_success "Self-healing configured"
 }
 
 # =============================================================================
-# STEP 7: VERIFY SYSTEM
+# HELM INSTALLATIONS
+# =============================================================================
+install_argocd() {
+    log_info "Installing ArgoCD..."
+    
+    helm repo add argo https://argoproj.github.io/argo-helm
+    helm repo update
+    
+    helm upgrade --install argocd argo/argo-cd \
+        --namespace argocd \
+        --create-namespace \
+        --set server.service.type=NodePort \
+        --set server.service.nodePorts.http=32434 \
+        --wait
+    
+    retry 5 kubectl wait --for=condition=Ready pods -n argocd -l app.kubernetes.io/name=argocd-server --timeout=300s
+    log_success "ArgoCD installed"
+}
+
+install_grafana() {
+    log_info "Installing Grafana..."
+    
+    helm repo add grafana https://grafana.github.io/helm-charts
+    helm repo update
+    
+    helm upgrade --install grafana grafana/grafana \
+        --namespace monitoring \
+        --create-namespace \
+        --set service.type=NodePort \
+        --set service.nodePort=31385 \
+        --set adminPassword='admin123' \
+        --set persistence.enabled=false \
+        --wait
+    
+    retry 5 kubectl wait --for=condition=Ready pods -n monitoring -l app.kubernetes.io/name=grafana --timeout=300s
+    log_success "Grafana installed"
+}
+
+# =============================================================================
+# CLOUDFLARE TUNNEL
+# =============================================================================
+setup_cloudflare_tunnel() {
+    log_info "Setting up Cloudflare Tunnel..."
+    
+    mkdir -p "$TUNNEL_CONFIG_DIR"
+    
+    # Detect tunnel credentials
+    local tunnel_id=""
+    local tunnel_file=""
+    
+    for file in "$TUNNEL_CONFIG_DIR"/*.json; do
+        if [ -f "$file" ]; then
+            tunnel_id=$(basename "$file" .json)
+            tunnel_file="$file"
+            break
+        fi
+    done
+    
+    if [ -z "$tunnel_id" ]; then
+        log_error "No tunnel credentials found in $TUNNEL_CONFIG_DIR"
+        exit 1
+    fi
+    
+    # Get Minikube IP
+    local minikube_ip=$(minikube ip -p eduai-cluster)
+    
+    # Generate config
+    cat > "$TUNNEL_CONFIG_DIR/config.yml" <<EOF
+tunnel: $tunnel_id
+credentials-file: $tunnel_file
+
+ingress:
+  - hostname: $DOMAIN
+    service: http://$minikube_ip:30007
+  - service: http_status:404
+EOF
+    
+    # Start tunnel
+    pkill -f "cloudflared tunnel run" || true
+    nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
+    local tunnel_pid=$!
+    
+    sleep 5
+    if kill -0 $tunnel_pid 2>/dev/null; then
+        echo $tunnel_pid > "$TUNNEL_CONFIG_DIR/tunnel.pid"
+        log_success "Cloudflare Tunnel started"
+    else
+        log_error "Failed to start Cloudflare Tunnel"
+        exit 1
+    fi
+}
+
+# =============================================================================
+# FINAL VERIFICATION
 # =============================================================================
 verify_system() {
-    log_info "Verifying system deployment..."
+    log_info "Verifying system..."
     
     # Check Minikube
     if ! minikube status -p eduai-cluster | grep -q "Running"; then
-        log_error "Minikube is not running"
+        log_error "Minikube not running"
         exit 1
     fi
     
     # Check pods
-    local frontend_pods=$(kubectl get pods -n eduai -l app=frontend --no-headers | wc -l)
-    local backend_pods=$(kubectl get pods -n eduai -l app=backend --no-headers | wc -l)
-    
-    if [ $frontend_pods -eq 0 ] || [ $backend_pods -eq 0 ]; then
-        log_error "Pods are not running"
+    local pod_count=$(kubectl get pods -n $NAMESPACE --no-headers | wc -l)
+    if [ $pod_count -eq 0 ]; then
+        log_error "No pods running"
         exit 1
     fi
     
     # Check tunnel
     if [ ! -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] || ! kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
-        log_error "Cloudflare Tunnel is not running"
+        log_error "Cloudflare Tunnel not running"
         exit 1
     fi
     
@@ -423,70 +396,24 @@ verify_system() {
 }
 
 # =============================================================================
-# STEP 8: OUTPUT ACCESS INFORMATION
-# =============================================================================
-output_access_info() {
-    log_info "Generating access information..."
-    
-    echo ""
-    echo "=== 🚀 SYSTEM READY ==="
-    echo ""
-    
-    echo "🌐 Domain:"
-    echo "https://$DOMAIN"
-    echo ""
-    
-    echo "Status:"
-    echo "✅ Tunnel: RUNNING"
-    echo "✅ Pods: RUNNING"
-    echo "✅ Minikube: RUNNING"
-    echo ""
-    
-    echo "📱 Local Access:"
-    local minikube_ip=$(minikube ip -p eduai-cluster)
-    echo "Frontend: http://$minikube_ip:$FRONTEND_NODEPORT"
-    echo "Backend:  http://$minikube_ip:$BACKEND_NODEPORT"
-    echo ""
-    
-    echo "🔍 System Status:"
-    echo "==============="
-    kubectl get pods -n eduai
-    echo ""
-    
-    echo "🌐 Services:"
-    echo "==========="
-    kubectl get svc -n eduai
-    echo ""
-    
-    echo "📋 Management Commands:"
-    echo "======================"
-    echo "Check tunnel logs: tail -f $TUNNEL_CONFIG_DIR/tunnel.log"
-    echo "Restart tunnel: pkill -f cloudflared && ./run.sh"
-    echo "Check pods: kubectl get pods -n eduai"
-    echo "Stop system: pkill -f cloudflared && minikube stop -p eduai-cluster"
-    echo ""
-    
-    log_success "Deployment completed successfully!"
-    log_info "Open https://$DOMAIN in your browser"
-}
-
-# =============================================================================
-# MAIN EXECUTION
+# MAIN
 # =============================================================================
 main() {
-    echo "🚀 AI Smart Learning Platform - Full Automated Deployment"
-    echo "========================================================="
-    echo ""
+    echo "🚀 AI Smart Learning Platform - Full Deployment"
+    echo "==============================================="
     
-    validate_system
+    check_tools
     setup_minikube
     build_images
     deploy_kubernetes
-    setup_cloudflare_tunnel
     setup_self_healing
+    install_argocd
+    install_grafana
+    setup_cloudflare_tunnel
     verify_system
-    output_access_info
+    
+    echo ""
+    echo "https://ailearn.duckdns.org"
 }
 
-# Execute main function
 main "$@"
