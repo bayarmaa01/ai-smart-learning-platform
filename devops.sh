@@ -120,21 +120,25 @@ deploy_kubernetes() {
     # Create namespace
     kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
     
-    # Apply manifests from k8s directory
+    # Apply core services first
+    log_info "Deploying core services..."
+    kubectl apply -f k8s/frontend-deployment-new.yaml -n $NAMESPACE
+    kubectl apply -f k8s/backend-deployment-new.yaml -n $NAMESPACE
+    
+    # Apply other manifests (skip argocd-application for now)
     if [ -d "k8s" ]; then
         for yaml in k8s/*.yaml; do
-            if [ -f "$yaml" ]; then
+            if [ -f "$yaml" ] && [[ "$yaml" != *"argocd-application"* ]] && [[ "$yaml" != *"-new.yaml"* ]]; then
                 log_info "Applying $yaml"
                 kubectl apply -f "$yaml" -n $NAMESPACE
             fi
         done
-    else
-        log_warning "k8s directory not found, creating basic deployments..."
-        create_basic_deployments
     fi
     
-    # Wait for deployments
-    retry 10 kubectl wait --for=condition=Available deployments --all -n $NAMESPACE --timeout=300s
+    # Wait for core deployments
+    retry 10 kubectl wait --for=condition=Available deployment/frontend -n $NAMESPACE --timeout=300s
+    retry 10 kubectl wait --for=condition=Available deployment/backend -n $NAMESPACE --timeout=300s
+    
     log_success "Kubernetes deployment completed"
 }
 
@@ -280,6 +284,11 @@ EOF
 install_argocd() {
     log_info "Installing ArgoCD..."
     
+    # Install ArgoCD CRDs first
+    log_info "Installing ArgoCD CRDs..."
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --namespace argocd || true
+    
     helm repo add argo https://argoproj.github.io/argo-helm
     helm repo update
     
@@ -288,6 +297,7 @@ install_argocd() {
         --create-namespace \
         --set server.service.type=NodePort \
         --set server.service.nodePorts.http=32434 \
+        --set crds.install=true \
         --wait
     
     retry 5 kubectl wait --for=condition=Ready pods -n argocd -l app.kubernetes.io/name=argocd-server --timeout=300s
