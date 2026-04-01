@@ -259,7 +259,16 @@ full_mode() {
     # Detect existing Kubernetes version
     local k8s_version=""
     if minikube status 2>/dev/null | grep -q "Running"; then
-        k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
+        # Try to get version from kubectl first
+        if kubectl version --short >/dev/null 2>&1; then
+            k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
+        fi
+        
+        # Fallback to minikube kubectl if regular kubectl fails
+        if [ -z "$k8s_version" ]; then
+            k8s_version=$(minikube kubectl -- version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
+        fi
+        
         if [ -n "$k8s_version" ]; then
             log_info "Detected existing cluster version: v$k8s_version"
         fi
@@ -275,15 +284,23 @@ full_mode() {
         log_info "Using default Kubernetes version: $target_version"
     fi
     
-    # Start Minikube with detected resources and version
-    log_info "Starting Minikube with optimal resources..."
-    retry 3 minikube start \
-        --driver=docker \
-        --cpus=$CPU_TARGET \
-        --memory=$RAM_TARGET \
-        --kubernetes-version=$target_version
+    # Start Minikube only if not running
+    if minikube status 2>/dev/null | grep -q "Running"; then
+        log_info "Minikube already running, skipping start"
+        # Set docker env for existing cluster
+        eval $(minikube docker-env)
+    else
+        # Start Minikube with detected resources and version
+        log_info "Starting Minikube with optimal resources..."
+        retry 3 minikube start \
+            --driver=docker \
+            --cpus=$CPU_TARGET \
+            --memory=$RAM_TARGET \
+            --kubernetes-version=$target_version
+        
+        eval $(minikube docker-env)
+    fi
     
-    eval $(minikube docker-env)
     retry 5 kubectl wait --for=condition=Ready nodes --all --timeout=${FULL_MODE_TIMEOUT}s
     
     # Smart Docker build
