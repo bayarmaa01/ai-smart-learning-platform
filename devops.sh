@@ -71,18 +71,37 @@ setup_minikube() {
         log_success "Minikube already running (context: $current_context)"
         kubectl config use-context "$current_context"
     else
-        log_info "Starting Minikube..."
+        # Detect existing Kubernetes version
+        local k8s_version=""
+        if minikube status 2>/dev/null | grep -q "Running"; then
+            k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
+            if [ -n "$k8s_version" ]; then
+                log_info "Detected existing cluster version: v$k8s_version"
+            fi
+        fi
+        
+        # Use existing version or default to latest stable
+        local target_version=""
+        if [ -n "$k8s_version" ]; then
+            target_version="v$k8s_version"
+            log_info "Using existing Kubernetes version: $target_version"
+        else
+            target_version="v1.28.0"
+            log_info "Using default Kubernetes version: $target_version"
+        fi
+        
+        log_info "Starting Minikube with version: $target_version"
         # Try docker driver first, fallback to none
         retry 3 minikube start \
             --driver=docker \
             --cpus=2 \
             --memory=4096 \
-            --kubernetes-version=v1.28.0 || \
+            --kubernetes-version=$target_version || \
         minikube start \
             --driver=none \
             --cpus=2 \
             --memory=4096 \
-            --kubernetes-version=v1.28.0
+            --kubernetes-version=$target_version
         log_success "Minikube started"
     fi
     

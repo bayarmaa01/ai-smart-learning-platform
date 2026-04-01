@@ -256,13 +256,32 @@ full_mode() {
     # Resource detection and setup
     detect_resources
     
-    # Start Minikube with detected resources
+    # Detect existing Kubernetes version
+    local k8s_version=""
+    if minikube status 2>/dev/null | grep -q "Running"; then
+        k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
+        if [ -n "$k8s_version" ]; then
+            log_info "Detected existing cluster version: v$k8s_version"
+        fi
+    fi
+    
+    # Use existing version or default to latest stable
+    local target_version=""
+    if [ -n "$k8s_version" ]; then
+        target_version="v$k8s_version"
+        log_info "Using existing Kubernetes version: $target_version"
+    else
+        target_version="v1.28.0"
+        log_info "Using default Kubernetes version: $target_version"
+    fi
+    
+    # Start Minikube with detected resources and version
     log_info "Starting Minikube with optimal resources..."
     retry 3 minikube start \
         --driver=docker \
         --cpus=$CPU_TARGET \
         --memory=$RAM_TARGET \
-        --kubernetes-version=v1.28.0
+        --kubernetes-version=$target_version
     
     eval $(minikube docker-env)
     retry 5 kubectl wait --for=condition=Ready nodes --all --timeout=${FULL_MODE_TIMEOUT}s
