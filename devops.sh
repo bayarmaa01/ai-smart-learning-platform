@@ -344,8 +344,16 @@ setup_cloudflare_tunnel() {
     done
     
     if [ -z "$tunnel_id" ]; then
-        log_error "No tunnel credentials found in $TUNNEL_CONFIG_DIR"
-        exit 1
+        log_warning "No tunnel credentials found in $TUNNEL_CONFIG_DIR"
+        echo ""
+        echo "🌐 To set up Cloudflare Tunnel:"
+        echo "1. Go to Cloudflare Dashboard > Zero Trust > Networks > Tunnels"
+        echo "2. Create tunnel and download credentials file"
+        echo "3. Place credentials file in: $TUNNEL_CONFIG_DIR/<tunnel-id>.json"
+        echo "4. Run: ./devops.sh again"
+        echo ""
+        log_success "Deployment completed without Cloudflare Tunnel"
+        return 0
     fi
     
     # Get Minikube IP
@@ -396,10 +404,11 @@ verify_system() {
         exit 1
     fi
     
-    # Check tunnel
-    if [ ! -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] || ! kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
-        log_error "Cloudflare Tunnel not running"
-        exit 1
+    # Check tunnel (optional)
+    if [ -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] && kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        log_success "Cloudflare Tunnel running"
+    else
+        log_warning "Cloudflare Tunnel not configured or not running"
     fi
     
     log_success "System verification passed"
@@ -423,7 +432,21 @@ main() {
     verify_system
     
     echo ""
-    echo "https://ailearn.duckdns.org"
+    echo "🌐 Access URLs:"
+    local minikube_ip=$(minikube ip -p eduai-cluster)
+    echo "Frontend: http://$minikube_ip:30007"
+    echo "Backend:  http://$minikube_ip:30008"
+    echo "ArgoCD:   http://$minikube_ip:32434"
+    echo "Grafana:  http://$minikube_ip:31385"
+    
+    # Check if tunnel is configured
+    if [ -f "$TUNNEL_CONFIG_DIR/config.yml" ]; then
+        echo ""
+        echo "🌐 External Domain: https://$DOMAIN"
+    else
+        echo ""
+        echo "🌐 External Domain: Not configured (see instructions above)"
+    fi
 }
 
 main "$@"
