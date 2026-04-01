@@ -76,8 +76,12 @@ retry() {
 select_mode() {
     log_info "Detecting environment and selecting optimal mode..."
     
-    # Check if Minikube is running
-    if minikube status 2>/dev/null | grep -q "Running"; then
+    # Check if any Minikube profile is running
+    local running_profile=""
+    if minikube profile list 2>/dev/null | grep -q "Running"; then
+        running_profile=$(minikube profile list 2>/dev/null | grep "Running" | awk '{print $1}' | head -1)
+        log_info "Found running Minikube profile: $running_profile"
+        
         if [ "$MODE" = "FULL" ]; then
             log_mode "FULL (forced)"
             return 0
@@ -258,7 +262,13 @@ full_mode() {
     
     # Detect existing Kubernetes version
     local k8s_version=""
-    if minikube status 2>/dev/null | grep -q "Running"; then
+    local running_profile=""
+    
+    # Get running profile
+    if minikube profile list 2>/dev/null | grep -q "Running"; then
+        running_profile=$(minikube profile list 2>/dev/null | grep "Running" | awk '{print $1}' | head -1)
+        log_info "Using running profile: $running_profile"
+        
         # Try to get version from kubectl first
         if kubectl version --short >/dev/null 2>&1; then
             k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
@@ -285,8 +295,8 @@ full_mode() {
     fi
     
     # Start Minikube only if not running
-    if minikube status 2>/dev/null | grep -q "Running"; then
-        log_info "Minikube already running, skipping start"
+    if [ -n "$running_profile" ]; then
+        log_info "Minikube profile '$running_profile' already running, skipping start"
         # Set docker env for existing cluster
         eval $(minikube docker-env)
     else
