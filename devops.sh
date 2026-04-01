@@ -65,19 +65,27 @@ check_tools() {
 setup_minikube() {
     log_info "Setting up Minikube..."
     
-    if minikube status -p eduai-cluster 2>/dev/null | grep -q "Running"; then
-        log_success "Minikube already running"
+    # Check if any cluster is running
+    local current_context=$(kubectl config current-context 2>/dev/null || echo "")
+    if [ -n "$current_context" ] && minikube status 2>/dev/null | grep -q "Running"; then
+        log_success "Minikube already running (context: $current_context)"
+        kubectl config use-context "$current_context"
     else
         log_info "Starting Minikube..."
-        retry 3 minikube start -p eduai-cluster \
+        # Try docker driver first, fallback to none
+        retry 3 minikube start \
             --driver=docker \
+            --cpus=2 \
+            --memory=4096 \
+            --kubernetes-version=v1.28.0 || \
+        minikube start \
+            --driver=none \
             --cpus=2 \
             --memory=4096 \
             --kubernetes-version=v1.28.0
         log_success "Minikube started"
     fi
     
-    kubectl config use-context eduai-cluster
     eval $(minikube docker-env)
     retry 5 kubectl wait --for=condition=Ready nodes --all --timeout=300s
 }
@@ -357,7 +365,7 @@ setup_cloudflare_tunnel() {
     fi
     
     # Get Minikube IP
-    local minikube_ip=$(minikube ip -p eduai-cluster)
+    local minikube_ip=$(minikube ip)
     
     # Generate config
     cat > "$TUNNEL_CONFIG_DIR/config.yml" <<EOF
@@ -392,7 +400,7 @@ verify_system() {
     log_info "Verifying system..."
     
     # Check Minikube
-    if ! minikube status -p eduai-cluster | grep -q "Running"; then
+    if ! minikube status | grep -q "Running"; then
         log_error "Minikube not running"
         exit 1
     fi
@@ -433,7 +441,7 @@ main() {
     
     echo ""
     echo "🌐 Access URLs:"
-    local minikube_ip=$(minikube ip -p eduai-cluster)
+    local minikube_ip=$(minikube ip)
     echo "Frontend: http://$minikube_ip:30007"
     echo "Backend:  http://$minikube_ip:30008"
     echo "ArgoCD:   http://$minikube_ip:32434"
