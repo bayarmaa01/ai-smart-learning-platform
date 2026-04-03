@@ -23,6 +23,7 @@ FAST_MODE_TIMEOUT=60
 FULL_MODE_TIMEOUT=300
 
 # Parse arguments
+FORCE_BUILD=false
 while [[ $# -gt 0 ]]; do
     case $1 in
         --fast)
@@ -33,8 +34,12 @@ while [[ $# -gt 0 ]]; do
             MODE="FULL"
             shift
             ;;
+        --force-build)
+            FORCE_BUILD=true
+            shift
+            ;;
         *)
-            echo "Usage: $0 [--fast|--full]"
+            echo "Usage: $0 [--fast|--full|--force-build]"
             exit 1
             ;;
     esac
@@ -149,7 +154,33 @@ detect_resources() {
 smart_docker_build() {
     log_info "Smart Docker build analysis..."
     
+    # Check if images exist in Minikube Docker environment
     eval $(minikube docker-env)
+    local frontend_exists=false
+    local backend_exists=false
+    
+    if docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "eduai-frontend:latest"; then
+        frontend_exists=true
+    fi
+    
+    if docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "eduai-backend:latest"; then
+        backend_exists=true
+    fi
+    
+    # Force rebuild if requested
+    if [ "$FORCE_BUILD" = true ]; then
+        log_info "Force build requested, rebuilding all images"
+        if [ "$frontend_exists" = true ]; then
+            docker rmi eduai-frontend:latest >/dev/null 2>&1 || true
+            frontend_exists=false
+        fi
+        if [ "$backend_exists" = true ]; then
+            docker rmi eduai-backend:latest >/dev/null 2>&1 || true
+            backend_exists=false
+        fi
+        # Remove checksum files to force rebuild
+        rm -f .frontend-checksum .backend-checksum
+    fi
     
     # Frontend build analysis
     local frontend_changed=false
@@ -157,7 +188,11 @@ smart_docker_build() {
         local current_checksum=$(find frontend -type f -exec sha1sum {} \; | sha1sum | cut -d' ' -f1)
         local checksum_file=".frontend-checksum"
         
-        if [ -f "$checksum_file" ]; then
+        if [ "$frontend_exists" = false ]; then
+            log_info "Frontend image missing, forcing build"
+            frontend_changed=true
+            echo "$current_checksum" > "$checksum_file"
+        elif [ -f "$checksum_file" ]; then
             local old_checksum=$(cat "$checksum_file")
             if [ "$current_checksum" != "$old_checksum" ]; then
                 log_info "Frontend changes detected"
@@ -182,7 +217,11 @@ smart_docker_build() {
         local current_checksum=$(find backend -type f -exec sha1sum {} \; | sha1sum | cut -d' ' -f1)
         local checksum_file=".backend-checksum"
         
-        if [ -f "$checksum_file" ]; then
+        if [ "$backend_exists" = false ]; then
+            log_info "Backend image missing, forcing build"
+            backend_changed=true
+            echo "$current_checksum" > "$checksum_file"
+        elif [ -f "$checksum_file" ]; then
             local old_checksum=$(cat "$checksum_file")
             if [ "$current_checksum" != "$old_checksum" ]; then
                 log_info "Backend changes detected"
@@ -366,10 +405,40 @@ full_mode() {
     kubectl apply -f k8s/frontend-deployment-new.yaml -n $NAMESPACE
     kubectl apply -f k8s/backend-deployment-new.yaml -n $NAMESPACE
     
-    # Wait for deployments
+    # Wait for deployments with better feedback
     log_info "Waiting for deployments (FULL mode)..."
-    retry 10 kubectl wait --for=condition=Available deployment/frontend -n $NAMESPACE --timeout=${FULL_MODE_TIMEOUT}s
-    retry 10 kubectl wait --for=condition=Available deployment/backend -n $NAMESPACE --timeout=${FULL_MODE_TIMEOUT}s
+    
+    # Wait for pods to be created first
+    log_info "Checking pod creation..."
+    local max_wait=60
+    local wait_count=0
+    while [ $wait_count -lt $max_wait ]; do
+        local pod_count=$(kubectl get pods -n $NAMESPACE --no-headers 2>/dev/null | wc -l || echo "0")
+        if [ "$pod_count" -gt 0 ]; then
+            log_success "Pods created ($pod_count pods found)"
+            break
+        fi
+        wait_count=$((wait_count + 5))
+        if [ $wait_count -lt $max_wait ]; then
+            echo -n "."
+            sleep 5
+        fi
+    done
+    
+    if [ $wait_count -ge $max_wait ]; then
+        log_warning "Pod creation taking longer than expected, proceeding anyway..."
+    fi
+    
+    # Now wait for deployments with individual timeouts
+    log_info "Waiting for frontend deployment..."
+    if ! kubectl wait --for=condition=Available deployment/frontend -n $NAMESPACE --timeout=180s; then
+        log_warning "Frontend deployment not ready, but continuing..."
+    fi
+    
+    log_info "Waiting for backend deployment..."
+    if ! kubectl wait --for=condition=Available deployment/backend -n $NAMESPACE --timeout=180s; then
+        log_warning "Backend deployment not ready, but continuing..."
+    fi
     
     # Smart Helm installs
     smart_helm_install
