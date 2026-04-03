@@ -78,6 +78,26 @@ select_mode() {
     
     # Check if any Minikube profile is running
     local running_profile=""
+    
+    # First try to check if any profile has active context
+    local active_context=$(kubectl config current-context 2>/dev/null || echo "")
+    if [ -n "$active_context" ] && [[ "$active_context" == minikube* ]]; then
+        # Check if the cluster is actually reachable
+        if kubectl cluster-info >/dev/null 2>&1; then
+            running_profile="$active_context"
+            log_info "Found running Minikube profile: $running_profile"
+            
+            if [ "$MODE" = "FULL" ]; then
+                log_mode "FULL (forced)"
+                return 0
+            else
+                log_mode "FAST"
+                return 1
+            fi
+        fi
+    fi
+    
+    # Fallback: check minikube profile list for running status
     if minikube profile list 2>/dev/null | grep -q "Running"; then
         running_profile=$(minikube profile list 2>/dev/null | grep "Running" | awk '{print $1}' | head -1)
         log_info "Found running Minikube profile: $running_profile"
@@ -265,10 +285,22 @@ full_mode() {
     local running_profile=""
     
     # Get running profile
-    if minikube profile list 2>/dev/null | grep -q "Running"; then
+    local active_context=$(kubectl config current-context 2>/dev/null || echo "")
+    if [ -n "$active_context" ] && [[ "$active_context" == minikube* ]]; then
+        if kubectl cluster-info >/dev/null 2>&1; then
+            running_profile="$active_context"
+            log_info "Using running profile: $running_profile"
+        fi
+    fi
+    
+    # Fallback: check minikube profile list
+    if [ -z "$running_profile" ] && minikube profile list 2>/dev/null | grep -q "Running"; then
         running_profile=$(minikube profile list 2>/dev/null | grep "Running" | awk '{print $1}' | head -1)
         log_info "Using running profile: $running_profile"
-        
+    fi
+    
+    # Get version if we have a running profile
+    if [ -n "$running_profile" ]; then
         # Try to get version from kubectl first
         if kubectl version --short >/dev/null 2>&1; then
             k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
