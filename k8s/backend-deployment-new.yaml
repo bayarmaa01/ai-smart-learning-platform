@@ -21,6 +21,19 @@ spec:
         imagePullPolicy: Never
         ports:
         - containerPort: 5000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://postgres:postgres123@postgres:5432/eduai"
+        - name: DB_HOST
+          value: "postgres"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "eduai"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_PASSWORD
+          value: "postgres123"
         resources:
           requests:
             memory: "256Mi"

@@ -402,6 +402,17 @@ full_mode() {
     # Deploy Kubernetes
     log_info "Deploying Kubernetes resources..."
     kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Deploy database first
+    log_info "Deploying PostgreSQL database..."
+    kubectl apply -f k8s/postgres-deployment.yaml -n $NAMESPACE
+    
+    # Wait for database to be ready
+    log_info "Waiting for PostgreSQL to be ready..."
+    kubectl wait --for=condition=Available deployment/postgres -n $NAMESPACE --timeout=120s || true
+    
+    # Deploy applications
+    log_info "Deploying applications..."
     kubectl apply -f k8s/frontend-deployment-new.yaml -n $NAMESPACE
     kubectl apply -f k8s/backend-deployment-new.yaml -n $NAMESPACE
     
