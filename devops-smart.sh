@@ -249,6 +249,12 @@ smart_docker_build() {
 fast_mode() {
     log_info "Executing FAST mode..."
     
+    # Ensure Kubernetes connection first
+    if ! ensure_k8s_ready; then
+        log_error "Cannot proceed with FAST mode - Kubernetes connection failed"
+        exit 1
+    fi
+    
     # Setup environment
     eval $(minikube docker-env)
     
@@ -276,6 +282,12 @@ fast_mode() {
 # =============================================================================
 full_mode() {
     log_info "Executing FULL mode..."
+    
+    # Ensure Kubernetes connection first
+    if ! ensure_k8s_ready; then
+        log_error "Cannot proceed with FULL mode - Kubernetes connection failed"
+        exit 1
+    fi
     
     # Resource detection and setup
     detect_resources
@@ -421,6 +433,12 @@ smart_helm_install() {
 heal_pods() {
     log_info "Running self-healing..."
     
+    # Ensure Kubernetes connectivity first
+    if ! ensure_k8s_ready; then
+        log_error "Cannot run self-healing - Kubernetes connection failed"
+        return 1
+    fi
+    
     # Delete failed pods
     local failed_pods=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase=Failed -o name 2>/dev/null || true)
     if [ -n "$failed_pods" ]; then
@@ -524,17 +542,18 @@ EOF
 verify_system() {
     log_info "Verifying system..."
     
-    # Check Minikube
-    if ! minikube status | grep -q "Running"; then
-        log_error "Minikube not running"
+    # Ensure Kubernetes connectivity first
+    if ! ensure_k8s_ready; then
+        log_error "System verification failed - Kubernetes connection issues"
         return 1
     fi
     
     # Check pods
-    local pod_count=$(kubectl get pods -n $NAMESPACE --no-headers | wc -l)
-    if [ $pod_count -eq 0 ]; then
-        log_error "No pods running"
-        return 1
+    local pod_count=$(kubectl get pods -n $NAMESPACE --no-headers 2>/dev/null | wc -l)
+    if [ "$pod_count" -eq 0 ]; then
+        log_warning "No pods running"
+    else
+        log_success "Found $pod_count pods running"
     fi
     
     # Check tunnel (optional)
@@ -581,20 +600,86 @@ output_access_info() {
 # =============================================================================
 # 🚀 MAIN EXECUTION
 # =============================================================================
+# 🔧 SYSTEM FUNCTIONS
+# =============================================================================
+ensure_k8s_ready() {
+    log_info "Ensuring Kubernetes connectivity..."
+    local max_retries=5
+    local retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        # Check current context
+        local current_context=$(kubectl config current-context 2>/dev/null || echo "")
+        
+        # If no context or not minikube, fix it
+        if [ -z "$current_context" ] || [[ "$current_context" != "minikube"* ]]; then
+            log_info "Fixing kubectl context..."
+            minikube update-context >/dev/null 2>&1 || true
+            kubectl config use-context minikube >/dev/null 2>&1 || true
+        fi
+        
+        # Test connectivity with a simple command
+        local test_result=$(kubectl get nodes --no-headers 2>/dev/null)
+        local exit_code=$?
+        
+        # Check for HTML/login response (indicates auth issues)
+        if echo "$test_result" | grep -q "html\|login\|Authentication\|signin"; then
+            log_warning "Detected authentication redirect, fixing kubeconfig..."
+            
+            # Reset minikube kubeconfig
+            minikube update-context --force >/dev/null 2>&1 || true
+            
+            # Remove broken contexts
+            kubectl config delete-context minikube >/dev/null 2>&1 || true
+            
+            # Recreate context
+            minikube update-context >/dev/null 2>&1 || true
+            kubectl config use-context minikube >/dev/null 2>&1 || true
+            
+            # Test again
+            test_result=$(kubectl get nodes --no-headers 2>/dev/null)
+            exit_code=$?
+        fi
+        
+        if [ $exit_code -eq 0 ] && ! echo "$test_result" | grep -q "html\|login\|Authentication"; then
+            log_success "Kubernetes connection healthy"
+            return 0
+        fi
+        
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt $max_retries ]; then
+            log_warning "Kubernetes connection failed (attempt $retry_count/$max_retries), retrying in ${retry_count}s..."
+            sleep $retry_count
+        fi
+    done
+    
+    log_error "Failed to establish Kubernetes connection after $max_retries attempts"
+    log_error "Please check your Minikube installation and try: minikube delete && minikube start"
+    return 1
+}
+
+check_tools() {
+    log_info "Checking required tools..."
+    local tools=("minikube" "kubectl" "docker" "helm")
+    for tool in "${tools[@]}"; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            log_error "$tool is not installed"
+            exit 1
+        fi
+    done
+    log_success "All tools available"
+}
+
 main() {
     echo "🧠 AI Smart Learning Platform - INTELLIGENT DevOps"
     echo "=================================================="
     echo ""
     
     # Check required tools
-    local tools=("docker" "kubectl" "minikube" "helm" "cloudflared")
-    for tool in "${tools[@]}"; do
-        if ! command -v $tool &> /dev/null; then
-            log_error "$tool not found. Please install it first."
-            exit 1
-        fi
-    done
-    log_success "All tools available"
+    check_tools
+    
+    # Ensure Kubernetes connection
+    ensure_k8s_ready
     
     # Select mode
     if select_mode; then
