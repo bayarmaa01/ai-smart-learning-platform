@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # =============================================================================
-# 🧠 AI SMART LEARNING PLATFORM - INTELLIGENT DEVOPS
+# 🧠 AI SMART LEARNING PLATFORM - INTELLIGENT DEVOPS (PRODUCTION-GRADE)
 # =============================================================================
 
 # Colors
@@ -21,9 +21,14 @@ NAMESPACE="eduai"
 MODE=""
 FAST_MODE_TIMEOUT=60
 FULL_MODE_TIMEOUT=300
+DEFAULT_K8S_VERSION="v1.34.0"
 
 # Parse arguments
 FORCE_BUILD=false
+RESET_CLUSTER=false
+SHOW_STATUS=false
+AUTO_FORWARD=false
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --fast)
@@ -34,40 +39,62 @@ while [[ $# -gt 0 ]]; do
             MODE="FULL"
             shift
             ;;
+        --reset)
+            RESET_CLUSTER=true
+            shift
+            ;;
+        --status)
+            SHOW_STATUS=true
+            shift
+            ;;
+        --forward)
+            AUTO_FORWARD=true
+            shift
+            ;;
         --force-build)
             FORCE_BUILD=true
             shift
             ;;
         *)
-            echo "Usage: $0 [--fast|--full|--force-build]"
+            echo "Usage: $0 [--fast|--full|--reset|--status|--forward|--force-build]"
+            echo ""
+            echo "Modes:"
+            echo "  --fast         Skip rebuild, only restart pods"
+            echo "  --full         Rebuild images + redeploy everything"
+            echo "  --reset        Delete minikube + clean start"
+            echo "  --status       Show cluster + pod health"
+            echo "  --forward      Auto port-forward services"
+            echo "  --force-build  Force rebuild all images"
             exit 1
             ;;
     esac
 done
 
-# Logging functions
+# =============================================================================
+# 📝 LOGGING FUNCTIONS
+# =============================================================================
 log_info() { echo -e "${BLUE}ℹ️  INFO: $1${NC}"; }
 log_success() { echo -e "${GREEN}✅ SUCCESS: $1${NC}"; }
 log_warning() { echo -e "${YELLOW}⚠️  WARNING: $1${NC}"; }
 log_error() { echo -e "${RED}❌ ERROR: $1${NC}"; }
-log_mode() { echo -e "${CYAN}🎯 MODE: $1${NC}"; }
-log_skip() { echo -e "${YELLOW}⏭️  SKIP: $1${NC}"; }
+log_step() { echo -e "${CYAN}🔄 STEP: $1${NC}"; }
 
-# Advanced retry with exponential backoff
+# Error handling
+trap 'log_error "Script failed at line $LINENO"' ERR
+
+# =============================================================================
+# 🔧 UTILITY FUNCTIONS
+# =============================================================================
 retry() {
     local retries=$1
     shift
-    local command="$*"
     local count=0
-    local backoff=1
-    
-    until $command; do
+    until "$@"; do
         exit_code=$?
         count=$((count + 1))
         if [ $count -lt $retries ]; then
-            log_warning "Command failed (attempt $count/$retries). Retrying in ${backoff}s..."
-            sleep $backoff
-            backoff=$((backoff * 2))
+            log_warning "Command failed (attempt $count/$retries). Retrying in ${count}s..."
+            sleep $count
         else
             log_error "Command failed after $retries attempts"
             return $exit_code
@@ -75,84 +102,185 @@ retry() {
     done
 }
 
-# =============================================================================
-# 🧠 INTELLIGENT MODE SELECTION
-# =============================================================================
-select_mode() {
-    log_info "Detecting environment and selecting optimal mode..."
+wait_for_pods() {
+    local namespace=$1
+    local timeout=${2:-300}
+    local label=${3:-""}
     
-    # Check if any Minikube profile is running
-    local running_profile=""
-    
-    # First try to check if any profile has active context
-    local active_context=$(kubectl config current-context 2>/dev/null || echo "")
-    if [ -n "$active_context" ] && [[ "$active_context" == minikube* ]]; then
-        # Check if the cluster is actually reachable
-        if kubectl cluster-info >/dev/null 2>&1; then
-            running_profile="$active_context"
-            log_info "Found running Minikube profile: $running_profile"
-            
-            if [ "$MODE" = "FULL" ]; then
-                log_mode "FULL (forced)"
-                return 0
-            else
-                log_mode "FAST"
-                return 1
-            fi
-        fi
+    log_info "Waiting for pods in namespace '$namespace'..."
+    local selector=""
+    if [ -n "$label" ]; then
+        selector="-l $label"
     fi
     
-    # Fallback: check minikube profile list for running status
-    if minikube profile list 2>/dev/null | grep -q "Running"; then
-        running_profile=$(minikube profile list 2>/dev/null | grep "Running" | awk '{print $1}' | head -1)
-        log_info "Found running Minikube profile: $running_profile"
-        
-        if [ "$MODE" = "FULL" ]; then
-            log_mode "FULL (forced)"
-            return 0
-        else
-            log_mode "FAST"
-            return 1
-        fi
-    else
-        log_mode "FULL"
-        return 0
-    fi
+    kubectl wait --for=condition=Ready pods -n "$namespace" $selector --timeout="${timeout}s" || {
+        log_warning "Some pods are not ready within ${timeout}s"
+        return 1
+    }
 }
 
 # =============================================================================
-# 🐳 SMART RESOURCE DETECTION
+# 🚀 KUBERNETES VERSION DETECTION
 # =============================================================================
-detect_resources() {
-    log_info "Auto-detecting system resources..."
+detect_k8s_version() {
+    local version=""
     
-    # CPU detection
-    local cpu_cores=$(nproc)
-    local cpu_target=$((cpu_cores / 2))
-    if [ $cpu_target -lt 2 ]; then cpu_target=2; fi
-    if [ $cpu_target -gt 4 ]; then cpu_target=4; fi
+    # Try to get version from running cluster
+    if kubectl cluster-info >/dev/null 2>&1; then
+        version=$(kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null || echo "")
+        if [ -n "$version" ]; then
+            log_success "Detected running Kubernetes version: $version"
+            echo "$version"
+            return 0
+        fi
+    fi
     
-    # RAM detection
-    local total_ram_mb=$(free -m | awk '/^Mem:/{print $2}')
-    local ram_target=$((total_ram_mb / 2))
-    if [ $ram_target -lt 2048 ]; then ram_target=2048; fi
-    if [ $ram_target -gt 6144 ]; then ram_target=6144; fi
+    # Fallback to minikube version
+    if minikube status >/dev/null 2>&1; then
+        version=$(minikube kubectl -- version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' || echo "")
+        if [ -n "$version" ]; then
+            log_success "Detected Minikube Kubernetes version: $version"
+            echo "$version"
+            return 0
+        fi
+    fi
     
-    echo "CPU_CORES=$cpu_cores"
-    echo "CPU_TARGET=$cpu_target"
-    echo "RAM_TOTAL=${total_ram_mb}MB"
-    echo "RAM_TARGET=${ram_target}MB"
+    # Return default version
+    log_info "No cluster detected, using default version: $DEFAULT_K8S_VERSION"
+    echo "$DEFAULT_K8S_VERSION"
+}
+
+# =============================================================================
+# 🛡️ CLUSTER HEALTH AUTO-RECOVERY
+# =============================================================================
+ensure_cluster_health() {
+    log_step "Ensuring cluster health..."
     
-    # Export for use by other functions
-    export CPU_TARGET=$cpu_target
-    export RAM_TARGET=$ram_target
+    # Check if kubectl can connect
+    if ! kubectl cluster-info >/dev/null 2>&1; then
+        log_warning "kubectl cannot connect to cluster, attempting recovery..."
+        
+        # Try to start minikube
+        if ! minikube status >/dev/null 2>&1; then
+            log_info "Starting Minikube..."
+            retry 3 minikube start --driver=docker
+        fi
+        
+        # Set context
+        log_info "Setting kubectl context..."
+        kubectl config use-context minikube >/dev/null 2>&1 || true
+        
+        # Validate connection
+        if ! kubectl get nodes >/dev/null 2>&1; then
+            log_error "Failed to establish cluster connection"
+            return 1
+        fi
+    fi
+    
+    log_success "Cluster is healthy"
+    return 0
+}
+
+# =============================================================================
+# 🗄️ POSTGRESQL DEPLOYMENT AND HEALTH CHECK
+# =============================================================================
+deploy_postgresql() {
+    log_step "Deploying PostgreSQL database..."
+    
+    # Create namespace if needed
+    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Deploy PostgreSQL
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: $NAMESPACE
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "eduai"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "postgres123"
+        - name: POSTGRES_HOST_AUTH_METHOD
+          value: "trust"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: postgres-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: postgres
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+EOF
+    
+    # Wait for PostgreSQL to be ready
+    log_info "Waiting for PostgreSQL to be ready..."
+    if ! wait_for_pods "$NAMESPACE" 120 "app=postgres"; then
+        log_error "PostgreSQL failed to start"
+        return 1
+    fi
+    
+    log_success "PostgreSQL is ready"
+    return 0
 }
 
 # =============================================================================
 # 🐳 SMART DOCKER BUILD
 # =============================================================================
 smart_docker_build() {
-    log_info "Smart Docker build analysis..."
+    log_step "Building Docker images..."
     
     # Check if images exist in Minikube Docker environment
     eval $(minikube docker-env)
@@ -178,614 +306,436 @@ smart_docker_build() {
             docker rmi eduai-backend:latest >/dev/null 2>&1 || true
             backend_exists=false
         fi
-        # Remove checksum files to force rebuild
-        rm -f .frontend-checksum .backend-checksum
     fi
     
-    # Frontend build analysis
-    local frontend_changed=false
-    if [ -d "frontend" ]; then
-        local current_checksum=$(find frontend -type f -exec sha1sum {} \; | sha1sum | cut -d' ' -f1)
-        local checksum_file=".frontend-checksum"
-        
-        if [ "$frontend_exists" = false ]; then
-            log_info "Frontend image missing, forcing build"
-            frontend_changed=true
-            echo "$current_checksum" > "$checksum_file"
-        elif [ -f "$checksum_file" ]; then
-            local old_checksum=$(cat "$checksum_file")
-            if [ "$current_checksum" != "$old_checksum" ]; then
-                log_info "Frontend changes detected"
-                echo "$current_checksum" > "$checksum_file"
-                frontend_changed=true
-            else
-                log_skip "Frontend unchanged (skipping build)"
-            fi
-        else
-            log_info "First-time frontend build"
-            echo "$current_checksum" > "$checksum_file"
-            frontend_changed=true
-        fi
-    else
-        log_warning "Frontend directory not found, using nginx"
-        frontend_changed=true
+    # Build frontend if needed
+    if [ "$frontend_exists" = false ] && [ -d "frontend" ]; then
+        log_info "Building frontend image..."
+        retry 3 docker build -t eduai-frontend:latest ./frontend
+        log_success "Frontend image built"
+    elif [ "$frontend_exists" = true ]; then
+        log_info "Frontend image already exists, skipping build"
     fi
     
-    # Backend build analysis
-    local backend_changed=false
-    if [ -d "backend" ]; then
-        local current_checksum=$(find backend -type f -exec sha1sum {} \; | sha1sum | cut -d' ' -f1)
-        local checksum_file=".backend-checksum"
-        
-        if [ "$backend_exists" = false ]; then
-            log_info "Backend image missing, forcing build"
-            backend_changed=true
-            echo "$current_checksum" > "$checksum_file"
-        elif [ -f "$checksum_file" ]; then
-            local old_checksum=$(cat "$checksum_file")
-            if [ "$current_checksum" != "$old_checksum" ]; then
-                log_info "Backend changes detected"
-                echo "$current_checksum" > "$checksum_file"
-                backend_changed=true
-            else
-                log_skip "Backend unchanged (skipping build)"
-            fi
-        else
-            log_info "First-time backend build"
-            echo "$current_checksum" > "$checksum_file"
-            backend_changed=true
-        fi
-    else
-        log_warning "Backend directory not found, using nginx"
-        backend_changed=true
-    fi
-    
-    # Parallel builds if needed
-    if [ "$frontend_changed" = true ] || [ "$backend_changed" = true ]; then
-        log_info "Starting parallel Docker builds..."
-        
-        if [ "$frontend_changed" = true ]; then
-            (
-                if [ -d "frontend" ]; then
-                    docker build -t eduai-frontend:latest ./frontend
-                    log_success "Frontend image built"
-                else
-                    docker pull nginx:alpine
-                    docker tag nginx:alpine eduai-frontend:latest
-                    log_success "Frontend image (nginx) built"
-                fi
-            ) &
-            local frontend_pid=$!
-        fi
-        
-        if [ "$backend_changed" = true ]; then
-            (
-                if [ -d "backend" ]; then
-                    docker build -t eduai-backend:latest ./backend
-                    log_success "Backend image built"
-                else
-                    docker pull nginx:alpine
-                    docker tag nginx:alpine eduai-backend:latest
-                    log_success "Backend image (nginx) built"
-                fi
-            ) &
-            local backend_pid=$!
-        fi
-        
-        # Wait for builds
-        if [ -n "${frontend_pid:-}" ]; then wait $frontend_pid; fi
-        if [ -n "${backend_pid:-}" ]; then wait $backend_pid; fi
-        
-        log_success "All Docker builds completed"
-    else
-        log_skip "All images up to date"
+    # Build backend if needed
+    if [ "$backend_exists" = false ] && [ -d "backend" ]; then
+        log_info "Building backend image..."
+        retry 3 docker build -t eduai-backend:latest ./backend
+        log_success "Backend image built"
+    elif [ "$backend_exists" = true ]; then
+        log_info "Backend image already exists, skipping build"
     fi
 }
 
 # =============================================================================
-# ⚡ FAST MODE EXECUTION
+# 🚀 DEPLOY APPLICATIONS
 # =============================================================================
-fast_mode() {
+deploy_applications() {
+    log_step "Deploying applications..."
+    
+    # Deploy frontend with security fixes
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: $NAMESPACE
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: eduai-frontend:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        securityContext:
+          runAsUser: 0
+          runAsGroup: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: frontend
+  type: NodePort
+  ports:
+  - port: 3000
+    targetPort: 80
+    nodePort: 30007
+EOF
+    
+    # Deploy backend with database connection
+    cat <<EOF | kubectl apply -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: $NAMESPACE
+  labels:
+    app: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: eduai-backend:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5000
+        env:
+        - name: DATABASE_URL
+          value: "postgresql://postgres:postgres123@postgres:5432/eduai"
+        - name: DB_HOST
+          value: "postgres"
+        - name: DB_PORT
+          value: "5432"
+        - name: DB_NAME
+          value: "eduai"
+        - name: DB_USER
+          value: "postgres"
+        - name: DB_PASSWORD
+          value: "postgres123"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: backend
+  type: NodePort
+  ports:
+  - port: 5000
+    targetPort: 5000
+    nodePort: 30008
+EOF
+    
+    log_success "Applications deployed"
+}
+
+# =============================================================================
+# 🔍 BACKEND CRASHLOOP AUTO-DEBUG
+# =============================================================================
+debug_backend_pods() {
+    log_step "Debugging backend pods..."
+    
+    local failed_pods=$(kubectl get pods -n "$NAMESPACE" -l app=backend -o jsonpath='{.items[?(@.status.phase=="Failed")].metadata.name}' 2>/dev/null || echo "")
+    local crashloop_pods=$(kubectl get pods -n "$NAMESPACE" -l app=backend -o jsonpath='{.items[?(@.status.reason=="CrashLoopBackOff")].metadata.name}' 2>/dev/null || echo "")
+    
+    if [ -n "$failed_pods" ] || [ -n "$crashloop_pods" ]; then
+        log_warning "Found problematic backend pods, analyzing logs..."
+        
+        for pod in $failed_pods $crashloop_pods; do
+            if [ -n "$pod" ]; then
+                log_info "Analyzing pod: $pod"
+                
+                # Get previous logs
+                local logs=$(kubectl logs "$pod" -n "$NAMESPACE" --previous 2>/dev/null || echo "")
+                
+                # Detect common issues
+                if echo "$logs" | grep -q "ECONNREFUSED"; then
+                    log_error "❌ Database connection refused - PostgreSQL not ready"
+                fi
+                
+                if echo "$logs" | grep -q "ENOTFOUND"; then
+                    log_error "❌ Database hostname not found - DNS issue"
+                fi
+                
+                if echo "$logs" | grep -q "authentication failed"; then
+                    log_error "❌ Database authentication failed - wrong credentials"
+                fi
+                
+                if echo "$logs" | grep -q "NODE_ENV"; then
+                    log_error "❌ Missing environment variables"
+                fi
+                
+                # Show sample logs
+                if [ -n "$logs" ]; then
+                    log_info "Last 10 lines from pod $pod:"
+                    echo "$logs" | tail -10
+                fi
+            fi
+        done
+    fi
+}
+
+# =============================================================================
+# 🔄 MODE EXECUTION
+# =============================================================================
+execute_fast_mode() {
     log_info "Executing FAST mode..."
     
-    # Ensure Kubernetes connection first
-    if ! ensure_k8s_ready; then
-        log_error "Cannot proceed with FAST mode - Kubernetes connection failed"
-        exit 1
-    fi
+    # Ensure cluster health
+    ensure_cluster_health
     
-    # Setup environment
-    eval $(minikube docker-env)
+    # Restart deployments
+    log_info "Restarting deployments..."
+    kubectl rollout restart deployment/frontend -n "$NAMESPACE"
+    kubectl rollout restart deployment/backend -n "$NAMESPACE"
     
-    # Quick namespace creation
-    kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    # Wait for pods
+    wait_for_pods "$NAMESPACE" "$FAST_MODE_TIMEOUT" "app=frontend" || true
+    wait_for_pods "$NAMESPACE" "$FAST_MODE_TIMEOUT" "app=backend" || true
     
-    # Apply core services with minimal waiting
-    log_info "Applying core services..."
-    kubectl apply -f k8s/frontend-deployment-new.yaml -n $NAMESPACE
-    kubectl apply -f k8s/backend-deployment-new.yaml -n $NAMESPACE
-    
-    # Smart waiting with short timeout
-    log_info "Waiting for deployments (FAST mode)..."
-    kubectl wait --for=condition=Available deployment/frontend -n $NAMESPACE --timeout=${FAST_MODE_TIMEOUT}s || true
-    kubectl wait --for=condition=Available deployment/backend -n $NAMESPACE --timeout=${FAST_MODE_TIMEOUT}s || true
-    
-    # Self-healing
-    heal_pods
+    # Debug if needed
+    debug_backend_pods
     
     log_success "FAST mode completed"
 }
 
-# =============================================================================
-# 🔥 FULL MODE EXECUTION
-# =============================================================================
-full_mode() {
+execute_full_mode() {
     log_info "Executing FULL mode..."
     
-    # Ensure Kubernetes connection first
-    if ! ensure_k8s_ready; then
-        log_error "Cannot proceed with FULL mode - Kubernetes connection failed"
-        exit 1
+    # Detect Kubernetes version
+    local k8s_version=$(detect_k8s_version)
+    
+    # Start cluster if needed
+    if ! minikube status >/dev/null 2>&1; then
+        log_info "Starting Minikube with version: $k8s_version"
+        retry 3 minikube start --driver=docker --kubernetes-version="$k8s_version"
     fi
     
-    # Resource detection and setup
-    detect_resources
+    # Set context
+    kubectl config use-context minikube >/dev/null 2>&1 || true
     
-    # Detect existing Kubernetes version
-    local k8s_version=""
-    local running_profile=""
+    # Setup Docker environment
+    eval $(minikube docker-env)
     
-    # Get running profile
-    local active_context=$(kubectl config current-context 2>/dev/null || echo "")
-    log_info "DEBUG: active_context='$active_context'"
-    if [ -n "$active_context" ] && [[ "$active_context" == minikube* ]]; then
-        if kubectl cluster-info >/dev/null 2>&1; then
-            running_profile="$active_context"
-            log_info "Using running profile: $running_profile"
-        fi
-    fi
+    # Clean namespace
+    log_info "Cleaning namespace..."
+    kubectl delete namespace "$NAMESPACE" --ignore-not-found=true
     
-    # Fallback: check minikube profile list
-    if [ -z "$running_profile" ] && minikube profile list 2>/dev/null | grep -q "Running"; then
-        running_profile=$(minikube profile list 2>/dev/null | grep "Running" | awk '{print $1}' | head -1)
-        log_info "Using running profile: $running_profile"
-    fi
+    # Deploy database
+    deploy_postgresql
     
-    # Get version if we have a running profile
-    if [ -n "$running_profile" ]; then
-        # Try to get version from kubectl first
-        if kubectl version --short >/dev/null 2>&1; then
-            k8s_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
-        fi
-        
-        # Fallback to minikube kubectl if regular kubectl fails
-        if [ -z "$k8s_version" ]; then
-            k8s_version=$(minikube kubectl -- version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' | sed 's/v//' || echo "")
-        fi
-        
-        if [ -n "$k8s_version" ]; then
-            log_info "Detected existing cluster version: v$k8s_version"
-        fi
-    else
-        log_info "DEBUG: No running profile detected"
-    fi
-    
-    # Use existing version or default to latest stable
-    local target_version=""
-    if [ -n "$k8s_version" ]; then
-        target_version="v$k8s_version"
-        log_info "Using existing Kubernetes version: $target_version"
-    else
-        target_version="v1.28.0"
-        log_info "Using default Kubernetes version: $target_version"
-    fi
-    
-    # If cluster exists with different version, use that version instead of downgrading
-    if [ -n "$running_profile" ] && [ -n "$k8s_version" ]; then
-        target_version="v$k8s_version"
-        log_info "Cluster already running with $target_version, using existing version"
-    fi
-    
-    # Start Minikube only if not running
-    if [ -n "$running_profile" ]; then
-        log_info "Minikube profile '$running_profile' already running, skipping start"
-        # Set docker env for existing cluster
-        eval $(minikube docker-env)
-    else
-        # Start Minikube with detected resources and version
-        log_info "Starting Minikube with optimal resources..."
-        retry 3 minikube start \
-            --driver=docker \
-            --cpus=$CPU_TARGET \
-            --memory=$RAM_TARGET \
-            --kubernetes-version=$target_version
-        
-        eval $(minikube docker-env)
-    fi
-    
-    retry 5 kubectl wait --for=condition=Ready nodes --all --timeout=${FULL_MODE_TIMEOUT}s
-    
-    # Smart Docker build
+    # Build images
     smart_docker_build
     
-    # Deploy Kubernetes
-    log_info "Deploying Kubernetes resources..."
-    kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
-    
-    # Deploy database first
-    log_info "Deploying PostgreSQL database..."
-    kubectl apply -f k8s/postgres-deployment.yaml -n $NAMESPACE
-    
-    # Wait for database to be ready
-    log_info "Waiting for PostgreSQL to be ready..."
-    kubectl wait --for=condition=Available deployment/postgres -n $NAMESPACE --timeout=120s || true
-    
     # Deploy applications
-    log_info "Deploying applications..."
-    kubectl apply -f k8s/frontend-deployment-new.yaml -n $NAMESPACE
-    kubectl apply -f k8s/backend-deployment-new.yaml -n $NAMESPACE
+    deploy_applications
     
-    # Wait for deployments with better feedback
-    log_info "Waiting for deployments (FULL mode)..."
+    # Wait for all pods
+    log_info "Waiting for all deployments..."
+    wait_for_pods "$NAMESPACE" "$FULL_MODE_TIMEOUT" "app=frontend" || true
+    wait_for_pods "$NAMESPACE" "$FULL_MODE_TIMEOUT" "app=backend" || true
     
-    # Wait for pods to be created first
-    log_info "Checking pod creation..."
-    local max_wait=60
-    local wait_count=0
-    while [ $wait_count -lt $max_wait ]; do
-        local pod_count=$(kubectl get pods -n $NAMESPACE --no-headers 2>/dev/null | wc -l || echo "0")
-        if [ "$pod_count" -gt 0 ]; then
-            log_success "Pods created ($pod_count pods found)"
-            break
-        fi
-        wait_count=$((wait_count + 5))
-        if [ $wait_count -lt $max_wait ]; then
-            echo -n "."
-            sleep 5
-        fi
-    done
-    
-    if [ $wait_count -ge $max_wait ]; then
-        log_warning "Pod creation taking longer than expected, proceeding anyway..."
-    fi
-    
-    # Now wait for deployments with individual timeouts
-    log_info "Waiting for frontend deployment..."
-    if ! kubectl wait --for=condition=Available deployment/frontend -n $NAMESPACE --timeout=180s; then
-        log_warning "Frontend deployment not ready, but continuing..."
-    fi
-    
-    log_info "Waiting for backend deployment..."
-    if ! kubectl wait --for=condition=Available deployment/backend -n $NAMESPACE --timeout=180s; then
-        log_warning "Backend deployment not ready, but continuing..."
-    fi
-    
-    # Smart Helm installs
-    smart_helm_install
-    
-    # Setup tunnel
-    setup_cloudflare_tunnel
+    # Debug if needed
+    debug_backend_pods
     
     log_success "FULL mode completed"
 }
 
-# =============================================================================
-# 🧠 SMART HELM INSTALL
-# =============================================================================
-smart_helm_install() {
-    log_info "Smart Helm installation check..."
+execute_reset_mode() {
+    log_info "Executing RESET mode..."
     
-    # ArgoCD install check
-    if helm list -n argocd 2>/dev/null | grep -q argocd; then
-        log_skip "ArgoCD already installed"
+    # Delete minikube cluster
+    log_warning "Deleting Minikube cluster..."
+    minikube delete || true
+    
+    # Clean up checksums
+    rm -f .frontend-checksum .backend-checksum
+    
+    # Execute full mode
+    execute_full_mode
+    
+    log_success "RESET mode completed"
+}
+
+show_status() {
+    log_info "Cluster Status:"
+    echo "================================"
+    
+    # Minikube status
+    if minikube status >/dev/null 2>&1; then
+        log_success "Minikube: Running"
+        minikube status
     else
-        log_info "Installing ArgoCD..."
-        helm repo add argo https://argoproj.github.io/argo-helm
-        helm repo update
-        
-        helm upgrade --install argocd argo/argo-cd \
-            --namespace argocd \
-            --create-namespace \
-            --set server.service.type=NodePort \
-            --set server.service.nodePorts.http=32434 \
-            --wait
-        
-        retry 5 kubectl wait --for=condition=Ready pods -n argocd -l app.kubernetes.io/name=argocd-server --timeout=${FULL_MODE_TIMEOUT}s
-        log_success "ArgoCD installed"
+        log_error "Minikube: Not running"
     fi
     
-    # Grafana install check
-    if helm list -n monitoring 2>/dev/null | grep -q grafana; then
-        log_skip "Grafana already installed"
-    else
-        log_info "Installing Grafana..."
-        helm repo add grafana https://grafana.github.io/helm-charts
-        helm repo update
-        
-        helm upgrade --install grafana grafana/grafana \
-            --namespace monitoring \
-            --create-namespace \
-            --set service.type=NodePort \
-            --set service.nodePort=31385 \
-            --set adminPassword='admin123' \
-            --set persistence.enabled=false \
-            --wait
-        
-        retry 5 kubectl wait --for=condition=Ready pods -n monitoring -l app.kubernetes.io/name=grafana --timeout=${FULL_MODE_TIMEOUT}s
-        log_success "Grafana installed"
-    fi
+    echo ""
+    log_info "Pods in namespace '$NAMESPACE':"
+    echo "================================"
+    kubectl get pods -n "$NAMESPACE" || echo "Namespace not found"
+    
+    echo ""
+    log_info "Services in namespace '$NAMESPACE':"
+    echo "================================"
+    kubectl get services -n "$NAMESPACE" || echo "Namespace not found"
+    
+    echo ""
+    log_info "Minikube Services:"
+    echo "================================"
+    minikube service list || echo "No services running"
 }
 
 # =============================================================================
-# 🔄 SELF-HEALING (IMPROVED)
+# 🌐 ACCESS INFORMATION
 # =============================================================================
-heal_pods() {
-    log_info "Running self-healing..."
-    
-    # Ensure Kubernetes connectivity first
-    if ! ensure_k8s_ready; then
-        log_error "Cannot run self-healing - Kubernetes connection failed"
-        return 1
-    fi
-    
-    # Delete failed pods
-    local failed_pods=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase=Failed -o name 2>/dev/null || true)
-    if [ -n "$failed_pods" ]; then
-        echo "$failed_pods" | while read pod; do
-            log_info "Deleting failed pod: $pod"
-            kubectl delete "$pod" -n $NAMESPACE --grace-period=0 --force || true
-        done
-    fi
-    
-    # Restart CrashLoopBackOff pods
-    local crashloop_pods=$(kubectl get pods -n $NAMESPACE -o jsonpath='{.items[?status.reason=="CrashLoopBackOff"].metadata.name}' 2>/dev/null || true)
-    if [ -n "$crashloop_pods" ]; then
-        echo "$crashloop_pods" | tr ' ' '\n' | while read pod; do
-            if [ -n "$pod" ]; then
-                log_info "Restarting CrashLoopBackOff pod: $pod"
-                kubectl delete pod "$pod" -n $NAMESPACE || true
-            fi
-        done
-    fi
-    
-    # Restart unhealthy deployments
-    kubectl get deployments -n $NAMESPACE -o name | while read deployment; do
-        local ready=$(kubectl get "$deployment" -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-        local desired=$(kubectl get "$deployment" -n $NAMESPACE -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
-        
-        if [ "$ready" != "$desired" ] || [ "$ready" = "0" ]; then
-            log_info "Restarting unhealthy deployment: $deployment"
-            kubectl rollout restart "$deployment" -n $NAMESPACE || true
-        fi
-    done
-    
-    log_success "Self-healing completed"
-}
-
-# =============================================================================
-# 🌐 CLOUDFLARE TUNNEL (IMPROVED)
-# =============================================================================
-setup_cloudflare_tunnel() {
-    log_info "Setting up Cloudflare Tunnel..."
-    
-    mkdir -p "$TUNNEL_CONFIG_DIR"
-    
-    # Detect tunnel credentials
-    local tunnel_id=""
-    local tunnel_file=""
-    
-    for file in "$TUNNEL_CONFIG_DIR"/*.json; do
-        if [ -f "$file" ]; then
-            tunnel_id=$(basename "$file" .json)
-            tunnel_file="$file"
-            break
-        fi
-    done
-    
-    if [ -z "$tunnel_id" ]; then
-        log_warning "No tunnel credentials found"
-        echo ""
-        echo "🌐 To set up Cloudflare Tunnel:"
-        echo "1. Go to Cloudflare Dashboard > Zero Trust > Networks > Tunnels"
-        echo "2. Create tunnel and download credentials file"
-        echo "3. Place credentials file in: $TUNNEL_CONFIG_DIR/<tunnel-id>.json"
-        echo "4. Run: ./devops-smart.sh again"
-        echo ""
-        return 0
-    fi
-    
-    # Get Minikube IP
-    local minikube_ip=$(minikube ip)
-    
-    # Generate config
-    cat > "$TUNNEL_CONFIG_DIR/config.yml" <<EOF
-tunnel: $tunnel_id
-credentials-file: $tunnel_file
-
-ingress:
-  - hostname: $DOMAIN
-    service: http://$minikube_ip:30007
-  - service: http_status:404
-EOF
-    
-    # Kill existing tunnel processes
-    pkill -f "cloudflared tunnel run" || true
-    
-    # Start tunnel
-    nohup cloudflared tunnel run --config "$TUNNEL_CONFIG_DIR/config.yml" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
-    local tunnel_pid=$!
-    
-    sleep 5
-    if kill -0 $tunnel_pid 2>/dev/null; then
-        echo $tunnel_pid > "$TUNNEL_CONFIG_DIR/tunnel.pid"
-        log_success "Cloudflare Tunnel started (PID: $tunnel_pid)"
-    else
-        log_warning "Failed to start Cloudflare Tunnel"
-        tail -10 "$TUNNEL_CONFIG_DIR/tunnel.log"
-    fi
-}
-
-# =============================================================================
-# 📊 SYSTEM VERIFICATION
-# =============================================================================
-verify_system() {
-    log_info "Verifying system..."
-    
-    # Ensure Kubernetes connectivity first
-    if ! ensure_k8s_ready; then
-        log_error "System verification failed - Kubernetes connection issues"
-        return 1
-    fi
-    
-    # Check pods
-    local pod_count=$(kubectl get pods -n $NAMESPACE --no-headers 2>/dev/null | wc -l)
-    if [ "$pod_count" -eq 0 ]; then
-        log_warning "No pods running"
-    else
-        log_success "Found $pod_count pods running"
-    fi
-    
-    # Check tunnel (optional)
-    if [ -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] && kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
-        log_success "Cloudflare Tunnel running"
-    else
-        log_warning "Cloudflare Tunnel not configured or not running"
-    fi
-    
-    log_success "System verification passed"
-}
-
-# =============================================================================
-# 📤 ACCESS URLS OUTPUT
-# =============================================================================
-output_access_info() {
+show_access_info() {
     echo ""
     echo "🌐 ACCESS URLS:"
     echo "==============="
     
-    local minikube_ip=$(minikube ip)
+    # Get Minikube IP
+    local minikube_ip=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+    
     echo "Frontend: http://$minikube_ip:30007"
     echo "Backend:  http://$minikube_ip:30008"
-    echo "ArgoCD:   http://$minikube_ip:32434"
-    echo "Grafana:  http://$minikube_ip:31385"
+    echo ""
+    echo "🌐 External Domain: https://$DOMAIN"
     
-    # Check if tunnel is configured
-    if [ -f "$TUNNEL_CONFIG_DIR/config.yml" ]; then
+    if [ "$AUTO_FORWARD" = true ]; then
         echo ""
-        echo "🌐 External Domain: https://$DOMAIN"
-    else
-        echo ""
-        echo "🌐 External Domain: Not configured (see instructions above)"
+        log_info "Starting port forwarding..."
+        echo "Frontend: kubectl port-forward -n $NAMESPACE svc/frontend 3000:3000"
+        echo "Backend:  kubectl port-forward -n $NAMESPACE svc/backend 5000:5000"
+        
+        # Start port forwarding in background
+        kubectl port-forward -n "$NAMESPACE" svc/frontend 3000:3000 &
+        FRONTEND_PID=$!
+        kubectl port-forward -n "$NAMESPACE" svc/backend 5000:5000 &
+        BACKEND_PID=$!
+        
+        echo "Port forwarding started (PIDs: $FRONTEND_PID, $BACKEND_PID)"
+        echo "Access via: http://localhost:3000 (frontend) and http://localhost:5000 (backend)"
     fi
-    
-    echo ""
-    echo "📊 SYSTEM STATUS:"
-    echo "================"
-    kubectl get pods -n $NAMESPACE
-    echo ""
-    kubectl get services -n $NAMESPACE
 }
 
 # =============================================================================
-# 🚀 MAIN EXECUTION
+# 🎯 MAIN EXECUTION
 # =============================================================================
-# 🔧 SYSTEM FUNCTIONS
-# =============================================================================
-ensure_k8s_ready() {
-    log_info "Ensuring Kubernetes connectivity..."
-    local max_retries=5
-    local retry_count=0
-    
-    while [ $retry_count -lt $max_retries ]; do
-        # Check current context
-        local current_context=$(kubectl config current-context 2>/dev/null || echo "")
-        
-        # If no context or not minikube, fix it
-        if [ -z "$current_context" ] || [[ "$current_context" != "minikube"* ]]; then
-            log_info "Fixing kubectl context..."
-            minikube update-context >/dev/null 2>&1 || true
-            kubectl config use-context minikube >/dev/null 2>&1 || true
-        fi
-        
-        # Test connectivity with a simple command
-        local test_result=$(kubectl get nodes --no-headers 2>/dev/null)
-        local exit_code=$?
-        
-        # Check for HTML/login response (indicates auth issues)
-        if echo "$test_result" | grep -q "html\|login\|Authentication\|signin"; then
-            log_warning "Detected authentication redirect, fixing kubeconfig..."
-            
-            # Reset minikube kubeconfig
-            minikube update-context --force >/dev/null 2>&1 || true
-            
-            # Remove broken contexts
-            kubectl config delete-context minikube >/dev/null 2>&1 || true
-            
-            # Recreate context
-            minikube update-context >/dev/null 2>&1 || true
-            kubectl config use-context minikube >/dev/null 2>&1 || true
-            
-            # Test again
-            test_result=$(kubectl get nodes --no-headers 2>/dev/null)
-            exit_code=$?
-        fi
-        
-        if [ $exit_code -eq 0 ] && ! echo "$test_result" | grep -q "html\|login\|Authentication"; then
-            log_success "Kubernetes connection healthy"
-            return 0
-        fi
-        
-        retry_count=$((retry_count + 1))
-        if [ $retry_count -lt $max_retries ]; then
-            log_warning "Kubernetes connection failed (attempt $retry_count/$max_retries), retrying in ${retry_count}s..."
-            sleep $retry_count
-        fi
-    done
-    
-    log_error "Failed to establish Kubernetes connection after $max_retries attempts"
-    log_error "Please check your Minikube installation and try: minikube delete && minikube start"
-    return 1
-}
-
-check_tools() {
-    log_info "Checking required tools..."
-    local tools=("minikube" "kubectl" "docker" "helm")
-    for tool in "${tools[@]}"; do
-        if ! command -v "$tool" >/dev/null 2>&1; then
-            log_error "$tool is not installed"
-            exit 1
-        fi
-    done
-    log_success "All tools available"
-}
-
 main() {
-    echo "🧠 AI Smart Learning Platform - INTELLIGENT DevOps"
-    echo "=================================================="
+    echo "🧠 AI Smart Learning Platform - INTELLIGENT DevOps (Production-Grade)"
+    echo "===================================================================="
     echo ""
     
-    # Check required tools
-    check_tools
-    
-    # Ensure Kubernetes connection
-    ensure_k8s_ready
-    
-    # Select mode
-    if select_mode; then
-        full_mode
-    else
-        fast_mode
+    # Check tools
+    if ! command -v kubectl >/dev/null 2>&1; then
+        log_error "kubectl not found. Please install kubectl."
+        exit 1
     fi
     
-    # Verify system
-    verify_system
+    if ! command -v minikube >/dev/null 2>&1; then
+        log_error "minikube not found. Please install minikube."
+        exit 1
+    fi
     
-    # Output access information
-    output_access_info
+    if ! command -v docker >/dev/null 2>&1; then
+        log_error "docker not found. Please install docker."
+        exit 1
+    fi
     
-    echo ""
-    log_success "Intelligent deployment completed successfully!"
+    # Execute based on mode
+    case "$MODE" in
+        "FAST")
+            execute_fast_mode
+            ;;
+        "FULL")
+            execute_full_mode
+            ;;
+        "")
+            # Auto-detect mode
+            if kubectl cluster-info >/dev/null 2>&1 && kubectl get pods -n "$NAMESPACE" >/dev/null 2>&1; then
+                log_info "Auto-detected FAST mode (cluster running)"
+                execute_fast_mode
+            else
+                log_info "Auto-detected FULL mode (cluster not ready)"
+                execute_full_mode
+            fi
+            ;;
+        *)
+            log_error "Invalid mode: $MODE"
+            exit 1
+            ;;
+    esac
+    
+    # Show status if requested
+    if [ "$SHOW_STATUS" = true ]; then
+        show_status
+    fi
+    
+    # Show final status
+    show_status
+    show_access_info
+    
+    log_success "🎉 Deployment completed successfully!"
 }
+
+# Handle reset mode separately
+if [ "$RESET_CLUSTER" = true ]; then
+    execute_reset_mode
+    exit 0
+fi
+
+# Handle status mode separately
+if [ "$SHOW_STATUS" = true ]; then
+    show_status
+    exit 0
+fi
 
 # Execute main function
-main "$@"
+main
