@@ -125,7 +125,19 @@ wait_for_pods() {
 # =============================================================================
 detect_k8s_version() {
     if kubectl cluster-info >/dev/null 2>&1; then
-        kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion'
+        # Try JSON output first
+        local version=$(kubectl version --output=json 2>/dev/null | grep -o '"gitVersion"' | cut -d'"' -f4 | head -1)
+        if [ -n "$version" ]; then
+            echo "$version"
+            return 0
+        fi
+        
+        # Fallback to short output
+        version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' || echo "")
+        if [ -n "$version" ]; then
+            echo "$version"
+            return 0
+        fi
     else
         echo "v1.34.0"
     fi
@@ -560,7 +572,12 @@ execute_full_mode() {
     # Check for existing cluster to prevent downgrade
     local current_version=""
     if kubectl cluster-info >/dev/null 2>&1; then
-        current_version=$(kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion' || echo "")
+        # Try JSON output first
+        current_version=$(kubectl version --output=json 2>/dev/null | grep -o '"gitVersion"' | cut -d'"' -f4 | head -1)
+        if [ -z "$current_version" ]; then
+            # Fallback to short output
+            current_version=$(kubectl version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' || echo "")
+        fi
     fi
     
     # Use existing version to avoid downgrade
