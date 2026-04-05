@@ -123,31 +123,11 @@ wait_for_pods() {
 # 🚀 KUBERNETES VERSION DETECTION
 # =============================================================================
 detect_k8s_version() {
-    local version=""
-    
-    # Try to get version from running cluster
     if kubectl cluster-info >/dev/null 2>&1; then
-        version=$(kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null || echo "")
-        if [ -n "$version" ]; then
-            log_success "Detected running Kubernetes version: $version"
-            echo "$version"
-            return 0
-        fi
+        kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion'
+    else
+        echo "v1.34.0"
     fi
-    
-    # Fallback to minikube version
-    if minikube status >/dev/null 2>&1; then
-        version=$(minikube kubectl -- version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' || echo "")
-        if [ -n "$version" ]; then
-            log_success "Detected Minikube Kubernetes version: $version"
-            echo "$version"
-            return 0
-        fi
-    fi
-    
-    # Return default version
-    log_info "No cluster detected, using default version: $DEFAULT_K8S_VERSION"
-    echo "$DEFAULT_K8S_VERSION"
 }
 
 # =============================================================================
@@ -549,13 +529,36 @@ execute_fast_mode() {
 execute_full_mode() {
     log_info "Executing FULL mode..."
     
-    # Detect Kubernetes version
-    local k8s_version=$(detect_k8s_version)
+    # Get target version (clean value only)
+    local target_version=$(detect_k8s_version | tr -d '[:space:]')
+    
+    # Validate version format
+    if [[ ! "$target_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Invalid Kubernetes version: $target_version"
+        exit 1
+    fi
+    
+    # Check for existing cluster to prevent downgrade
+    local current_version=""
+    if kubectl cluster-info >/dev/null 2>&1; then
+        current_version=$(kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion' || echo "")
+    fi
+    
+    # Use existing version to avoid downgrade
+    local final_version="$target_version"
+    if [[ -n "$current_version" && "$current_version" != "$target_version" ]]; then
+        log_warning "Existing cluster version ($current_version) differs from target ($target_version)"
+        log_warning "Using existing version to avoid downgrade"
+        final_version="$current_version"
+        log_success "Using existing Kubernetes version: $final_version"
+    else
+        log_info "Using Kubernetes version: $final_version"
+    fi
     
     # Start cluster if needed
     if ! minikube status >/dev/null 2>&1; then
-        log_info "Starting Minikube with version: $k8s_version"
-        retry 3 minikube start --driver=docker --kubernetes-version="$k8s_version"
+        log_info "Starting Minikube with version: $final_version"
+        retry 3 minikube start --driver=docker --kubernetes-version="$final_version"
     fi
     
     # Set context
@@ -641,7 +644,7 @@ show_access_info() {
     echo "==============="
     
     # Get Minikube IP
-    local minikube_ip=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+    local minikube_ip=$(minikube ip 2>/dev/null | tr -d '[:space:]' || echo "192.168.49.2")
     
     echo "Frontend: http://$minikube_ip:30007"
     echo "Backend:  http://$minikube_ip:30008"
