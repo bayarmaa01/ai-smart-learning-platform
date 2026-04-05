@@ -377,6 +377,12 @@ full_mode() {
         log_info "Using default Kubernetes version: $target_version"
     fi
     
+    # If cluster exists with different version, use that version instead of downgrading
+    if [ -n "$running_profile" ] && [ -n "$k8s_version" ]; then
+        target_version="v$k8s_version"
+        log_info "Cluster already running with $target_version, using existing version"
+    fi
+    
     # Start Minikube only if not running
     if [ -n "$running_profile" ]; then
         log_info "Minikube profile '$running_profile' already running, skipping start"
@@ -402,6 +408,17 @@ full_mode() {
     # Deploy Kubernetes
     log_info "Deploying Kubernetes resources..."
     kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+    
+    # Deploy database first
+    log_info "Deploying PostgreSQL database..."
+    kubectl apply -f k8s/postgres-deployment.yaml -n $NAMESPACE
+    
+    # Wait for database to be ready
+    log_info "Waiting for PostgreSQL to be ready..."
+    kubectl wait --for=condition=Available deployment/postgres -n $NAMESPACE --timeout=120s || true
+    
+    # Deploy applications
+    log_info "Deploying applications..."
     kubectl apply -f k8s/frontend-deployment-new.yaml -n $NAMESPACE
     kubectl apply -f k8s/backend-deployment-new.yaml -n $NAMESPACE
     
