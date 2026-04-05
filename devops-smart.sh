@@ -377,6 +377,12 @@ full_mode() {
         log_info "Using default Kubernetes version: $target_version"
     fi
     
+    # If cluster exists with different version, use that version instead of downgrading
+    if [ -n "$running_profile" ] && [ -n "$k8s_version" ]; then
+        target_version="v$k8s_version"
+        log_info "Cluster already running with $target_version, using existing version"
+    fi
+    
     # Start Minikube only if not running
     if [ -n "$running_profile" ]; then
         log_info "Minikube profile '$running_profile' already running, skipping start"
