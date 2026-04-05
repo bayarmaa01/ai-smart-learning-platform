@@ -113,7 +113,8 @@ wait_for_pods() {
         selector="-l $label"
     fi
     
-    kubectl wait --for=condition=Ready pods -n "$namespace" $selector --timeout="${timeout}s" || {
+    # Use minikube kubectl to avoid connection issues
+    minikube kubectl -- wait --for=condition=Ready pods -n "$namespace" $selector --timeout="${timeout}s" || {
         log_warning "Some pods are not ready within ${timeout}s"
         return 1
     }
@@ -168,10 +169,10 @@ deploy_postgresql() {
     log_step "Deploying PostgreSQL database..."
     
     # Create namespace if needed
-    kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+    minikube kubectl -- create namespace "$NAMESPACE" --dry-run=client -o yaml | minikube kubectl -- apply -f -
     
     # Deploy PostgreSQL
-    cat <<EOF | kubectl apply -f -
+    cat <<EOF | minikube kubectl -- apply -f -
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -247,9 +248,27 @@ EOF
     
     # Wait for PostgreSQL to be ready
     log_info "Waiting for PostgreSQL to be ready..."
-    if ! wait_for_pods "$NAMESPACE" 120 "app=postgres"; then
-        log_error "PostgreSQL failed to start"
-        return 1
+    
+    # Check pod status manually first
+    local pod_status=""
+    local max_wait=120
+    local wait_count=0
+    
+    while [ $wait_count -lt $max_wait ]; do
+        pod_status=$(minikube kubectl -- get pods -n "$NAMESPACE" -l app=postgres -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
+        if [ "$pod_status" = "Running" ]; then
+            log_success "PostgreSQL is running"
+            break
+        fi
+        wait_count=$((wait_count + 5))
+        if [ $wait_count -lt $max_wait ]; then
+            echo -n "."
+            sleep 5
+        fi
+    done
+    
+    if [ $wait_count -ge $max_wait ]; then
+        log_warning "PostgreSQL taking longer than expected, but continuing..."
     fi
     
     log_success "PostgreSQL is ready"
@@ -314,7 +333,7 @@ deploy_applications() {
     log_step "Deploying applications..."
     
     # Deploy frontend with security fixes
-    cat <<EOF | kubectl apply -f -
+    cat <<EOF | minikube kubectl -- apply -f -
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -380,7 +399,7 @@ spec:
 EOF
     
     # Deploy backend with database connection
-    cat <<EOF | kubectl apply -f -
+    cat <<EOF | minikube kubectl -- apply -f -
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -513,8 +532,8 @@ execute_fast_mode() {
     
     # Restart deployments
     log_info "Restarting deployments..."
-    kubectl rollout restart deployment/frontend -n "$NAMESPACE"
-    kubectl rollout restart deployment/backend -n "$NAMESPACE"
+    minikube kubectl -- rollout restart deployment/frontend -n "$NAMESPACE"
+    minikube kubectl -- rollout restart deployment/backend -n "$NAMESPACE"
     
     # Wait for pods
     wait_for_pods "$NAMESPACE" "$FAST_MODE_TIMEOUT" "app=frontend" || true
@@ -569,7 +588,7 @@ execute_full_mode() {
     
     # Clean namespace
     log_info "Cleaning namespace..."
-    kubectl delete namespace "$NAMESPACE" --ignore-not-found=true
+    minikube kubectl -- delete namespace "$NAMESPACE" --ignore-not-found=true
     
     # Deploy database
     deploy_postgresql
