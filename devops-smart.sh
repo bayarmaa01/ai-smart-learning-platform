@@ -337,6 +337,7 @@ full_mode() {
     
     # Get running profile
     local active_context=$(kubectl config current-context 2>/dev/null || echo "")
+    log_info "DEBUG: active_context='$active_context'"
     if [ -n "$active_context" ] && [[ "$active_context" == minikube* ]]; then
         if kubectl cluster-info >/dev/null 2>&1; then
             running_profile="$active_context"
@@ -365,6 +366,8 @@ full_mode() {
         if [ -n "$k8s_version" ]; then
             log_info "Detected existing cluster version: v$k8s_version"
         fi
+    else
+        log_info "DEBUG: No running profile detected"
     fi
     
     # Use existing version or default to latest stable
