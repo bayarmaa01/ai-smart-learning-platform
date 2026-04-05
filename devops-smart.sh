@@ -123,13 +123,10 @@ wait_for_pods() {
 # 🚀 KUBERNETES VERSION DETECTION
 # =============================================================================
 detect_k8s_version() {
-    local version=""
-    
     # Try to get version from running cluster
     if kubectl cluster-info >/dev/null 2>&1; then
-        version=$(kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null || echo "")
+        local version=$(kubectl version --output=json 2>/dev/null | jq -r '.serverVersion.gitVersion' 2>/dev/null || echo "")
         if [ -n "$version" ]; then
-            log_success "Detected running Kubernetes version: $version"
             echo "$version"
             return 0
         fi
@@ -137,16 +134,14 @@ detect_k8s_version() {
     
     # Fallback to minikube version
     if minikube status >/dev/null 2>&1; then
-        version=$(minikube kubectl -- version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' || echo "")
+        local version=$(minikube kubectl -- version --short 2>/dev/null | grep "Server Version" | awk '{print $3}' || echo "")
         if [ -n "$version" ]; then
-            log_success "Detected Minikube Kubernetes version: $version"
             echo "$version"
             return 0
         fi
     fi
     
     # Return default version
-    log_info "No cluster detected, using default version: $DEFAULT_K8S_VERSION"
     echo "$DEFAULT_K8S_VERSION"
 }
 
@@ -550,7 +545,20 @@ execute_full_mode() {
     log_info "Executing FULL mode..."
     
     # Detect Kubernetes version
-    local k8s_version=$(detect_k8s_version)
+    local k8s_version=$(detect_k8s_version | tr -d '[:space:]')
+    
+    # Validate version format
+    if [[ ! "$k8s_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Invalid Kubernetes version: $k8s_version"
+        exit 1
+    fi
+    
+    # Log the detected version
+    if kubectl cluster-info >/dev/null 2>&1; then
+        log_success "Detected running Kubernetes version: $k8s_version"
+    else
+        log_info "No cluster detected, using default version: $k8s_version"
+    fi
     
     # Start cluster if needed
     if ! minikube status >/dev/null 2>&1; then
@@ -641,7 +649,7 @@ show_access_info() {
     echo "==============="
     
     # Get Minikube IP
-    local minikube_ip=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+    local minikube_ip=$(minikube ip 2>/dev/null | tr -d '[:space:]' || echo "192.168.49.2")
     
     echo "Frontend: http://$minikube_ip:30007"
     echo "Backend:  http://$minikube_ip:30008"
