@@ -262,7 +262,6 @@ spec:
         securityContext:
           runAsUser: 999
           runAsGroup: 999
-          fsGroup: 999
         resources:
           requests:
             memory: "256Mi"
