@@ -638,6 +638,12 @@ execute_fast_mode() {
     wait_for_pods "$NAMESPACE" "$FAST_MODE_TIMEOUT" "app=frontend" || true
     wait_for_pods "$NAMESPACE" "$FAST_MODE_TIMEOUT" "app=backend" || true
     
+    # Setup Cloudflare Tunnel for external access
+    setup_cloudflare_tunnel
+    
+    # Show access information
+    show_access_info
+    
     # Debug if needed
     debug_backend_pods
     
@@ -699,7 +705,12 @@ execute_full_mode() {
     # Deploy applications
     deploy_applications
     
-    # Wait for all pods
+    # Setup Cloudflare Tunnel for external access
+    setup_cloudflare_tunnel
+    
+    # Show access information
+    show_access_info
+    
     log_info "Waiting for all deployments..."
     wait_for_pods "$NAMESPACE" "$FULL_MODE_TIMEOUT" "app=frontend" || true
     wait_for_pods "$NAMESPACE" "$FULL_MODE_TIMEOUT" "app=backend" || true
@@ -755,6 +766,96 @@ show_status() {
 }
 
 # =============================================================================
+# 🌐 CLOUDFLARE TUNNEL SETUP
+# =============================================================================
+setup_cloudflare_tunnel() {
+    log_step "Setting up Cloudflare Tunnel..."
+    
+    # Check if cloudflared is installed
+    if ! command -v cloudflared >/dev/null 2>&1; then
+        log_info "Installing cloudflared..."
+        if command -v wget >/dev/null 2>&1; then
+            wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -O /tmp/cloudflared.deb
+            sudo dpkg -i /tmp/cloudflared.deb || {
+                log_info "Trying alternative installation method..."
+                curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.tar.gz | tar xz
+                sudo mv cloudflared /usr/local/bin/
+            }
+        elif command -v curl >/dev/null 2>&1; then
+            curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.tar.gz | tar xz
+            sudo mv cloudflared /usr/local/bin/
+        else
+            log_error "Neither wget nor curl available for cloudflared installation"
+            return 1
+        fi
+    fi
+    
+    # Check if already authenticated
+    if [ ! -f "$HOME/.cloudflared/cert.pem" ]; then
+        log_info "Please authenticate Cloudflare Tunnel..."
+        cloudflared tunnel login
+    fi
+    
+    # Create tunnel if not exists
+    local tunnel_name="eduai-tunnel"
+    local tunnel_id=$(cloudflared tunnel list --format=json | jq -r ".[] | select(.name == \"$tunnel_name\") | .uuid" 2>/dev/null || echo "")
+    
+    if [ -z "$tunnel_id" ]; then
+        log_info "Creating new tunnel: $tunnel_name"
+        tunnel_id=$(cloudflared tunnel create "$tunnel_name" --format=json | jq -r .result.uuid)
+    fi
+    
+    # Create config directory
+    mkdir -p "$HOME/.cloudflared"
+    
+    # Create tunnel config
+    cat > "$HOME/.cloudflared/config.yml" <<EOF
+tunnel: $tunnel_id
+credentials-file: $HOME/.cloudflared/$tunnel_id.json
+
+ingress:
+  - hostname: $DOMAIN
+    service: http://localhost:3000
+  - service: http_status:404
+EOF
+    
+    # Create DNS record if not exists
+    if ! cloudflared tunnel route dns "$tunnel_name" "$DOMAIN" >/dev/null 2>&1; then
+        cloudflared tunnel route dns "$tunnel_name" "$DOMAIN"
+    fi
+    
+    # Start tunnel in background
+    if [ -f "$TUNNEL_CONFIG_DIR/tunnel.pid" ] && kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+        log_success "Cloudflare Tunnel already running"
+    else
+        log_info "Starting Cloudflare Tunnel..."
+        nohup cloudflared tunnel run "$tunnel_name" > "$TUNNEL_CONFIG_DIR/tunnel.log" 2>&1 &
+        echo $! > "$TUNNEL_CONFIG_DIR/tunnel.pid"
+        
+        # Wait for tunnel to start
+        local max_wait=30
+        local wait_count=0
+        while [ $wait_count -lt $max_wait ]; do
+            if kill -0 $(cat "$TUNNEL_CONFIG_DIR/tunnel.pid") 2>/dev/null; then
+                log_success "Cloudflare Tunnel started successfully"
+                break
+            fi
+            wait_count=$((wait_count + 2))
+            if [ $wait_count -lt $max_wait ]; then
+                echo -n "."
+                sleep 2
+            fi
+        done
+        
+        if [ $wait_count -ge $max_wait ]; then
+            log_warning "Tunnel taking longer than expected, but continuing..."
+        fi
+    fi
+    
+    return 0
+}
+
+# =============================================================================
 # 🌐 ACCESS INFORMATION
 # =============================================================================
 show_access_info() {
@@ -765,11 +866,11 @@ show_access_info() {
     # Get Minikube IP
     local minikube_ip=$(minikube ip 2>/dev/null | tr -d '[:space:]' || echo "192.168.49.2")
     
+    echo "🌐 Public URL: https://$DOMAIN"
+    echo ""
     echo "📱 AI LEARNING PLATFORM:"
     echo "  Frontend: http://$minikube_ip:30007"
     echo "  Backend:  http://$minikube_ip:30008"
-    echo ""
-    echo "🌐 External Domain: https://$DOMAIN"
     echo ""
     
     echo "📊 MONITORING & DEVOPS:"
