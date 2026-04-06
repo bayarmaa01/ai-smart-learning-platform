@@ -177,6 +177,36 @@ deploy_postgresql() {
     # Create namespace if needed
     minikube kubectl -- create namespace "$NAMESPACE" --dry-run=client -o yaml | minikube kubectl -- apply -f -
     
+    # Create PostgreSQL ConfigMap first
+    cat <<EOF | minikube kubectl -- apply -f -
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: $NAMESPACE
+data:
+  postgresql.conf: |
+    # Disable SSL for development
+    ssl = off
+    # Allow all connections for development
+    listen_addresses = '*'
+    # Connection settings
+    max_connections = 100
+    # Logging
+    log_statement = 'all'
+    log_min_duration_statement = 1000
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    # Allow local connections
+    local   all             postgres                                trust
+    local   all             all                                     trust
+    # Allow IPv4 connections without SSL
+    host    all             all             0.0.0.0/0               trust
+    # Allow IPv6 connections without SSL  
+    host    all             all             ::/0                    trust
+EOF
+    
     # Deploy PostgreSQL
     cat <<EOF | minikube kubectl -- apply -f -
 ---
@@ -203,6 +233,12 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5432
+        command:
+        - "postgres"
+        - "-c"
+        - "config_file=/etc/postgresql/postgresql.conf"
+        - "-c"
+        - "hba_file=/etc/postgresql/pg_hba.conf"
         env:
         - name: POSTGRES_DB
           value: "eduai"
@@ -212,6 +248,10 @@ spec:
           value: "postgres123"
         - name: POSTGRES_HOST_AUTH_METHOD
           value: "trust"
+        - name: POSTGRES_INITDB_ARGS
+          value: "--auth-host=md5"
+        - name: POSTGRES_INITDB_WALDIR
+          value: "/var/lib/postgresql/wal"
         resources:
           requests:
             memory: "256Mi"
@@ -222,6 +262,12 @@ spec:
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+        - name: postgres-config
+          mountPath: /etc/postgresql/postgresql.conf
+          subPath: postgresql.conf
+        - name: postgres-config
+          mountPath: /etc/postgresql/pg_hba.conf
+          subPath: pg_hba.conf
         readinessProbe:
           exec:
             command:
@@ -237,6 +283,9 @@ spec:
       volumes:
       - name: postgres-storage
         emptyDir: {}
+      - name: postgres-config
+        configMap:
+          name: postgres-config
 ---
 apiVersion: v1
 kind: Service
@@ -380,14 +429,18 @@ spec:
           httpGet:
             path: /
             port: 80
-          initialDelaySeconds: 10
-          periodSeconds: 5
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /
             port: 80
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -432,7 +485,7 @@ spec:
         - containerPort: 5000
         env:
         - name: DATABASE_URL
-          value: "postgresql://postgres:postgres123@postgres:5432/eduai"
+          value: "postgresql://postgres:postgres123@postgres:5432/eduai?sslmode=disable"
         - name: DB_HOST
           value: "postgres"
         - name: DB_PORT
@@ -443,6 +496,8 @@ spec:
           value: "postgres"
         - name: DB_PASSWORD
           value: "postgres123"
+        - name: DB_SSL_MODE
+          value: "disable"
         resources:
           requests:
             memory: "256Mi"
@@ -454,14 +509,18 @@ spec:
           httpGet:
             path: /api/health
             port: 5000
-          initialDelaySeconds: 15
-          periodSeconds: 5
+          initialDelaySeconds: 45
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /api/health
             port: 5000
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service
@@ -487,8 +546,8 @@ EOF
 debug_backend_pods() {
     log_step "Debugging backend pods..."
     
-    local failed_pods=$(kubectl get pods -n "$NAMESPACE" -l app=backend -o jsonpath='{.items[?(@.status.phase=="Failed")].metadata.name}' 2>/dev/null || echo "")
-    local crashloop_pods=$(kubectl get pods -n "$NAMESPACE" -l app=backend -o jsonpath='{.items[?(@.status.reason=="CrashLoopBackOff")].metadata.name}' 2>/dev/null || echo "")
+    local failed_pods=$(minikube kubectl -- get pods -n "$NAMESPACE" -l app=backend -o jsonpath='{.items[?(@.status.phase=="Failed")].metadata.name}' 2>/dev/null || echo "")
+    local crashloop_pods=$(minikube kubectl -- get pods -n "$NAMESPACE" -l app=backend -o jsonpath='{.items[?(@.status.reason=="CrashLoopBackOff")].metadata.name}' 2>/dev/null || echo "")
     
     if [ -n "$failed_pods" ] || [ -n "$crashloop_pods" ]; then
         log_warning "Found problematic backend pods, analyzing logs..."
@@ -498,7 +557,7 @@ debug_backend_pods() {
                 log_info "Analyzing pod: $pod"
                 
                 # Get previous logs
-                local logs=$(kubectl logs "$pod" -n "$NAMESPACE" --previous 2>/dev/null || echo "")
+                local logs=$(minikube kubectl -- logs "$pod" -n "$NAMESPACE" --previous 2>/dev/null || echo "")
                 
                 # Detect common issues
                 if echo "$logs" | grep -q "ECONNREFUSED"; then
@@ -517,13 +576,31 @@ debug_backend_pods() {
                     log_error "❌ Missing environment variables"
                 fi
                 
+                if echo "$logs" | grep -q "ModuleNotFoundError"; then
+                    log_error "❌ Python module missing - need to rebuild image"
+                fi
+                
+                if echo "$logs" | grep -q "ImportError"; then
+                    log_error "❌ Python import error - need to rebuild image"
+                fi
+                
                 # Show sample logs
                 if [ -n "$logs" ]; then
                     log_info "Last 10 lines from pod $pod:"
                     echo "$logs" | tail -10
+                else
+                    log_info "No previous logs found for pod $pod, trying current logs..."
+                    local current_logs=$(minikube kubectl -- logs "$pod" -n "$NAMESPACE" 2>/dev/null || echo "")
+                    if [ -n "$current_logs" ]; then
+                        echo "$current_logs" | tail -10
+                    else
+                        log_warning "Could not fetch logs for pod $pod"
+                    fi
                 fi
             fi
         done
+        
+        log_info "Suggestion: Try rebuilding backend image with --force-build flag"
     fi
 }
 
@@ -672,25 +749,49 @@ show_access_info() {
     # Get Minikube IP
     local minikube_ip=$(minikube ip 2>/dev/null | tr -d '[:space:]' || echo "192.168.49.2")
     
-    echo "Frontend: http://$minikube_ip:30007"
-    echo "Backend:  http://$minikube_ip:30008"
+    echo "📱 AI LEARNING PLATFORM:"
+    echo "  Frontend: http://$minikube_ip:30007"
+    echo "  Backend:  http://$minikube_ip:30008"
     echo ""
     echo "🌐 External Domain: https://$DOMAIN"
+    echo ""
+    
+    echo "📊 MONITORING & DEVOPS:"
+    echo "  Grafana:    http://$minikube_ip:30031"
+    echo "  Prometheus: http://$minikube_ip:30091"
+    echo "  ArgoCD:     http://$minikube_ip:30081"
+    echo ""
+    
+    echo "🤖 AI SERVICES:"
+    echo "  AI Service: http://$minikube_ip:30020"
+    echo ""
+    
+    echo "🔐 DEFAULT CREDENTIALS:"
+    echo "  Grafana:     admin/admin"
+    echo "  ArgoCD:      admin/admin123"
+    echo ""
     
     if [ "$AUTO_FORWARD" = true ]; then
         echo ""
         log_info "Starting port forwarding..."
         echo "Frontend: kubectl port-forward -n $NAMESPACE svc/frontend 3000:3000"
         echo "Backend:  kubectl port-forward -n $NAMESPACE svc/backend 5000:5000"
+        echo "Grafana:   kubectl port-forward -n monitoring svc/grafana 3001:3000"
+        echo "ArgoCD:    kubectl port-forward -n argocd svc/argocd-server 3012:80"
         
         # Start port forwarding in background
-        kubectl port-forward -n "$NAMESPACE" svc/frontend 3000:3000 &
+        minikube kubectl -- port-forward -n "$NAMESPACE" svc/frontend 3000:3000 &
         FRONTEND_PID=$!
-        kubectl port-forward -n "$NAMESPACE" svc/backend 5000:5000 &
-        BACKEND_PID=$!
+        minikube kubectl -- port-forward -n "$NAMESPACE" svc/backend 5000:5000 &
+        minikube kubectl -- port-forward -n monitoring svc/grafana 3001:3000 &
+        minikube kubectl -- port-forward -n argocd svc/argocd-server 3012:80 &
         
-        echo "Port forwarding started (PIDs: $FRONTEND_PID, $BACKEND_PID)"
-        echo "Access via: http://localhost:3000 (frontend) and http://localhost:5000 (backend)"
+        echo "Port forwarding started!"
+        echo "Access via:"
+        echo "  Frontend: http://localhost:3000"
+        echo "  Backend:  http://localhost:5000"
+        echo "  Grafana:  http://localhost:3001"
+        echo "  ArgoCD:   http://localhost:3012"
     fi
 }
 
