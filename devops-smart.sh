@@ -773,21 +773,12 @@ setup_cloudflare_tunnel() {
     
     # Check if cloudflared is installed
     if ! command -v cloudflared >/dev/null 2>&1; then
-        log_info "Installing cloudflared..."
-        if command -v wget >/dev/null 2>&1; then
-            wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -O /tmp/cloudflared.deb
-            sudo dpkg -i /tmp/cloudflared.deb || {
-                log_info "Trying alternative installation method..."
-                curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.tar.gz | tar xz
-                sudo mv cloudflared /usr/local/bin/
-            }
-        elif command -v curl >/dev/null 2>&1; then
-            curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.tar.gz | tar xz
-            sudo mv cloudflared /usr/local/bin/
-        else
-            log_error "Neither wget nor curl available for cloudflared installation"
-            return 1
-        fi
+        log_warning "cloudflared not found, skipping tunnel setup"
+        log_info "To install cloudflared manually:"
+        log_info "  wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.tar.gz"
+        log_info "  tar xzf cloudflared-linux-amd64.tar.gz"
+        log_info "  sudo mv cloudflared /usr/local/bin/"
+        return 0
     fi
     
     # Check if already authenticated
@@ -798,11 +789,15 @@ setup_cloudflare_tunnel() {
     
     # Create tunnel if not exists
     local tunnel_name="eduai-tunnel"
-    local tunnel_id=$(cloudflared tunnel list --format=json | jq -r ".[] | select(.name == \"$tunnel_name\") | .uuid" 2>/dev/null || echo "")
+    local tunnel_id=$(cloudflared tunnel list 2>/dev/null | grep "$tunnel_name" | awk '{print $2}' || echo "")
     
     if [ -z "$tunnel_id" ]; then
         log_info "Creating new tunnel: $tunnel_name"
-        tunnel_id=$(cloudflared tunnel create "$tunnel_name" --format=json | jq -r .result.uuid)
+        tunnel_id=$(cloudflared tunnel create "$tunnel_name" | grep "Created tunnel" | awk '{print $3}' || echo "")
+        if [ -z "$tunnel_id" ]; then
+            # Try alternative parsing
+            tunnel_id=$(cloudflared tunnel create "$tunnel_name" | tail -1 | awk '{print $NF}' || echo "")
+        fi
     fi
     
     # Create config directory
@@ -912,6 +907,7 @@ show_access_info() {
     fi
 }
 
+
 # =============================================================================
 # 🎯 MAIN EXECUTION
 # =============================================================================
@@ -977,6 +973,7 @@ if [ "$RESET_CLUSTER" = true ]; then
     execute_reset_mode
     exit 0
 fi
+
 
 # Handle status mode separately
 if [ "$SHOW_STATUS" = true ]; then
