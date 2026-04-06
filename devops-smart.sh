@@ -28,6 +28,8 @@ FORCE_BUILD=false
 RESET_CLUSTER=false
 SHOW_STATUS=false
 AUTO_FORWARD=false
+DEBUG_CAREER_COACH=false
+FIX_CAREER_COACH=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -55,8 +57,16 @@ while [[ $# -gt 0 ]]; do
             FORCE_BUILD=true
             shift
             ;;
+        --debug-career)
+            DEBUG_CAREER_COACH=true
+            shift
+            ;;
+        --fix-career)
+            FIX_CAREER_COACH=true
+            shift
+            ;;
         *)
-            echo "Usage: $0 [--fast|--full|--reset|--status|--forward|--force-build]"
+            echo "Usage: $0 [--fast|--full|--reset|--status|--forward|--force-build|--debug-career|--fix-career]"
             echo ""
             echo "Modes:"
             echo "  --fast         Skip rebuild, only restart pods"
@@ -65,6 +75,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --status       Show cluster + pod health"
             echo "  --forward      Auto port-forward services"
             echo "  --force-build  Force rebuild all images"
+            echo "  --debug-career Debug existing Career Coach services"
+            echo "  --fix-career   Fix existing Career Coach services"
             exit 1
             ;;
     esac
@@ -913,6 +925,102 @@ show_access_info() {
 }
 
 # =============================================================================
+# 🔍 EXISTING SERVICES DEBUG & FIX
+# =============================================================================
+debug_career_coach_services() {
+    log_step "Debugging Career Coach services..."
+    
+    # Check career-coach-prod namespace
+    if kubectl get namespace career-coach-prod >/dev/null 2>&1; then
+        log_info "Found career-coach-prod namespace, checking services..."
+        
+        # Check AI Service
+        local ai_service_pods=$(kubectl get pods -n career-coach-prod -l app=ai-service -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+        if [ -n "$ai_service_pods" ]; then
+            log_info "AI Service pods: $ai_service_pods"
+            for pod in $ai_service_pods; do
+                log_info "Checking AI Service pod: $pod"
+                local pod_status=$(kubectl get pod "$pod" -n career-coach-prod -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+                log_info "  Status: $pod_status"
+                
+                if [ "$pod_status" = "Running" ]; then
+                    # Check metrics endpoint
+                    log_info "  Testing metrics endpoint..."
+                    local metrics_response=$(kubectl exec "$pod" -n career-coach-prod -- curl -s -o /dev/null -w "%{http_code}" http://localhost:5100/metrics 2>/dev/null || echo "000")
+                    if [ "$metrics_response" = "404" ]; then
+                        log_warning "  AI Service metrics endpoint returns 404 - service may not have /metrics endpoint"
+                    elif [ "$metrics_response" = "200" ]; then
+                        log_success "  AI Service metrics endpoint working"
+                    else
+                        log_warning "  AI Service metrics endpoint returned: $metrics_response"
+                    fi
+                    
+                    # Check service logs
+                    log_info "  Recent logs (last 5 lines):"
+                    kubectl logs "$pod" -n career-coach-prod --tail=5 2>/dev/null || log_warning "  Could not fetch logs"
+                fi
+            done
+        fi
+        
+        # Check Backend Service
+        local backend_pods=$(kubectl get pods -n career-coach-prod -l app=backend -o jsonpath='{.items[*].metadata.name}' 2>/dev/null || echo "")
+        if [ -n "$backend_pods" ]; then
+            log_info "Backend Service pods: $backend_pods"
+            for pod in $backend_pods; do
+                log_info "Checking Backend pod: $pod"
+                local pod_status=$(kubectl get pod "$pod" -n career-coach-prod -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+                log_info "  Status: $pod_status"
+                
+                if [ "$pod_status" = "Running" ]; then
+                    # Check metrics endpoint
+                    log_info "  Testing metrics endpoint..."
+                    local metrics_response=$(kubectl exec "$pod" -n career-coach-prod -- curl -s -o /dev/null -w "%{http_code}" http://localhost:4100/metrics 2>/dev/null || echo "000")
+                    if [ "$metrics_response" = "500" ]; then
+                        log_error "  Backend Service metrics endpoint returns 500 - internal error"
+                        # Get error logs
+                        log_info "  Error logs (last 10 lines):"
+                        kubectl logs "$pod" -n career-coach-prod --tail=10 2>/dev/null || log_warning "  Could not fetch logs"
+                    elif [ "$metrics_response" = "200" ]; then
+                        log_success "  Backend Service metrics endpoint working"
+                    else
+                        log_warning "  Backend Service metrics endpoint returned: $metrics_response"
+                    fi
+                fi
+            done
+        fi
+        
+        # Show services status
+        log_info "Career Coach services:"
+        kubectl get services -n career-coach-prod 2>/dev/null || log_warning "  Could not get services"
+        
+    else
+        log_info "No career-coach-prod namespace found"
+    fi
+}
+
+fix_career_coach_services() {
+    log_step "Attempting to fix Career Coach services..."
+    
+    if kubectl get namespace career-coach-prod >/dev/null 2>&1; then
+        # Restart problematic services
+        log_info "Restarting AI Service..."
+        kubectl rollout restart deployment/ai-service -n career-coach-prod 2>/dev/null || log_warning "Could not restart AI Service"
+        
+        log_info "Restarting Backend Service..."
+        kubectl rollout restart deployment/backend -n career-coach-prod 2>/dev/null || log_warning "Could not restart Backend Service"
+        
+        # Wait for rollout
+        log_info "Waiting for rollout to complete..."
+        kubectl rollout status deployment/ai-service -n career-coach-prod --timeout=60s 2>/dev/null || log_warning "AI Service rollout timeout"
+        kubectl rollout status deployment/backend -n career-coach-prod --timeout=60s 2>/dev/null || log_warning "Backend Service rollout timeout"
+        
+        log_success "Career Coach services restart attempted"
+    else
+        log_warning "No career-coach-prod namespace found"
+    fi
+}
+
+# =============================================================================
 # 🎯 MAIN EXECUTION
 # =============================================================================
 main() {
@@ -975,6 +1083,18 @@ main() {
 # Handle reset mode separately
 if [ "$RESET_CLUSTER" = true ]; then
     execute_reset_mode
+    exit 0
+fi
+
+# Handle debug career coach mode separately
+if [ "$DEBUG_CAREER_COACH" = true ]; then
+    debug_career_coach_services
+    exit 0
+fi
+
+# Handle fix career coach mode separately
+if [ "$FIX_CAREER_COACH" = true ]; then
+    fix_career_coach_services
     exit 0
 fi
 
