@@ -757,9 +757,9 @@ show_access_info() {
     echo ""
     
     echo "📊 MONITORING & DEVOPS:"
-    echo "  Grafana:    http://$minikube_ip:30030"
-    echo "  Prometheus: http://$minikube_ip:30090"
-    echo "  ArgoCD:     http://$minikube_ip:30080"
+    echo "  Grafana:    http://$minikube_ip:30031"
+    echo "  Prometheus: http://$minikube_ip:30091"
+    echo "  ArgoCD:     http://$minikube_ip:30081"
     echo ""
     
     echo "🤖 AI SERVICES:"
@@ -774,24 +774,24 @@ show_access_info() {
     if [ "$AUTO_FORWARD" = true ]; then
         echo ""
         log_info "Starting port forwarding..."
-        echo "Frontend: kubectl port-forward -n $NAMESPACE svc/frontend 3000:3000"
-        echo "Backend:  kubectl port-forward -n $NAMESPACE svc/backend 5000:5000"
-        echo "Grafana:   kubectl port-forward -n monitoring svc/grafana 3001:3000"
-        echo "ArgoCD:    kubectl port-forward -n argocd svc/argocd-server 3002:80"
+        echo "Frontend: kubectl port-forward -n $NAMESPACE svc/frontend 3010:3000"
+        echo "Backend:  kubectl port-forward -n $NAMESPACE svc/backend 5010:5000"
+        echo "Grafana:   kubectl port-forward -n monitoring svc/grafana 3011:3000"
+        echo "ArgoCD:    kubectl port-forward -n argocd svc/argocd-server 3012:80"
         
         # Start port forwarding in background
-        minikube kubectl -- port-forward -n "$NAMESPACE" svc/frontend 3000:3000 &
+        minikube kubectl -- port-forward -n "$NAMESPACE" svc/frontend 3010:3000 &
         FRONTEND_PID=$!
-        minikube kubectl -- port-forward -n "$NAMESPACE" svc/backend 5000:5000 &
-        minikube kubectl -- port-forward -n monitoring svc/grafana 3001:3000 &
-        minikube kubectl -- port-forward -n argocd svc/argocd-server 3002:80 &
+        minikube kubectl -- port-forward -n "$NAMESPACE" svc/backend 5010:5000 &
+        minikube kubectl -- port-forward -n monitoring svc/grafana 3011:3000 &
+        minikube kubectl -- port-forward -n argocd svc/argocd-server 3012:80 &
         
         echo "Port forwarding started!"
         echo "Access via:"
-        echo "  Frontend: http://localhost:3000"
-        echo "  Backend:  http://localhost:5000"
-        echo "  Grafana:  http://localhost:3001"
-        echo "  ArgoCD:   http://localhost:3002"
+        echo "  Frontend: http://localhost:3010"
+        echo "  Backend:  http://localhost:5010"
+        echo "  Grafana:  http://localhost:3011"
+        echo "  ArgoCD:   http://localhost:3012"
     fi
 }
 
