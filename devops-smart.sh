@@ -227,6 +227,10 @@ spec:
       labels:
         app: postgres
     spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -234,6 +238,7 @@ spec:
         ports:
         - containerPort: 5432
         command:
+        - "docker-entrypoint.sh"
         - "postgres"
         - "-c"
         - "config_file=/etc/postgresql/postgresql.conf"
@@ -252,6 +257,12 @@ spec:
           value: "--auth-host=md5"
         - name: POSTGRES_INITDB_WALDIR
           value: "/var/lib/postgresql/wal"
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        securityContext:
+          runAsUser: 999
+          runAsGroup: 999
+          fsGroup: 999
         resources:
           requests:
             memory: "256Mi"
@@ -272,14 +283,22 @@ spec:
           exec:
             command:
             - pg_isready
-          initialDelaySeconds: 10
-          periodSeconds: 5
+            - -U
+            - postgres
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         livenessProbe:
           exec:
             command:
             - pg_isready
-          initialDelaySeconds: 30
-          periodSeconds: 10
+            - -U
+            - postgres
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
       volumes:
       - name: postgres-storage
         emptyDir: {}
@@ -421,8 +440,6 @@ spec:
             memory: "256Mi"
             cpu: "200m"
         securityContext:
-          runAsUser: 0
-          runAsGroup: 0
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
         readinessProbe:
