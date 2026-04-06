@@ -793,11 +793,19 @@ setup_cloudflare_tunnel() {
     
     if [ -z "$tunnel_id" ]; then
         log_info "Creating new tunnel: $tunnel_name"
-        tunnel_id=$(cloudflared tunnel create "$tunnel_name" | grep "Created tunnel" | awk '{print $3}' || echo "")
+        local tunnel_output=$(cloudflared tunnel create "$tunnel_name" 2>&1)
+        tunnel_id=$(echo "$tunnel_output" | grep "Created tunnel" | awk '{print $3}' || echo "")
         if [ -z "$tunnel_id" ]; then
-            # Try alternative parsing
-            tunnel_id=$(cloudflared tunnel create "$tunnel_name" | tail -1 | awk '{print $NF}' || echo "")
+            # Try alternative parsing methods
+            tunnel_id=$(echo "$tunnel_output" | tail -1 | awk '{print $NF}' || echo "")
+            if [ -z "$tunnel_id" ]; then
+                log_error "Failed to create tunnel: $tunnel_output"
+                return 1
+            fi
         fi
+        log_success "Created tunnel with ID: $tunnel_id"
+    else
+        log_success "Using existing tunnel: $tunnel_id"
     fi
     
     # Create config directory
@@ -815,8 +823,15 @@ ingress:
 EOF
     
     # Create DNS record if not exists
+    log_info "Setting up DNS record for $DOMAIN..."
     if ! cloudflared tunnel route dns "$tunnel_name" "$DOMAIN" >/dev/null 2>&1; then
-        cloudflared tunnel route dns "$tunnel_name" "$DOMAIN"
+        log_info "Creating DNS record for $DOMAIN..."
+        cloudflared tunnel route dns "$tunnel_name" "$DOMAIN" || {
+            log_warning "DNS record already exists or failed to create"
+            log_info "The tunnel will still work, but DNS may need manual configuration"
+        }
+    else
+        log_success "DNS record already exists for $DOMAIN"
     fi
     
     # Start tunnel in background
