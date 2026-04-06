@@ -177,6 +177,36 @@ deploy_postgresql() {
     # Create namespace if needed
     minikube kubectl -- create namespace "$NAMESPACE" --dry-run=client -o yaml | minikube kubectl -- apply -f -
     
+    # Create PostgreSQL ConfigMap first
+    cat <<EOF | minikube kubectl -- apply -f -
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: $NAMESPACE
+data:
+  postgresql.conf: |
+    # Disable SSL for development
+    ssl = off
+    # Allow all connections for development
+    listen_addresses = '*'
+    # Connection settings
+    max_connections = 100
+    # Logging
+    log_statement = 'all'
+    log_min_duration_statement = 1000
+  pg_hba.conf: |
+    # TYPE  DATABASE        USER            ADDRESS                 METHOD
+    # Allow local connections
+    local   all             postgres                                trust
+    local   all             all                                     trust
+    # Allow IPv4 connections without SSL
+    host    all             all             0.0.0.0/0               trust
+    # Allow IPv6 connections without SSL  
+    host    all             all             ::/0                    trust
+EOF
+    
     # Deploy PostgreSQL
     cat <<EOF | minikube kubectl -- apply -f -
 ---
@@ -203,6 +233,12 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5432
+        command:
+        - "postgres"
+        - "-c"
+        - "config_file=/etc/postgresql/postgresql.conf"
+        - "-c"
+        - "hba_file=/etc/postgresql/pg_hba.conf"
         env:
         - name: POSTGRES_DB
           value: "eduai"
@@ -212,6 +248,10 @@ spec:
           value: "postgres123"
         - name: POSTGRES_HOST_AUTH_METHOD
           value: "trust"
+        - name: POSTGRES_INITDB_ARGS
+          value: "--auth-host=md5"
+        - name: POSTGRES_INITDB_WALDIR
+          value: "/var/lib/postgresql/wal"
         resources:
           requests:
             memory: "256Mi"
@@ -222,6 +262,12 @@ spec:
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
+        - name: postgres-config
+          mountPath: /etc/postgresql/postgresql.conf
+          subPath: postgresql.conf
+        - name: postgres-config
+          mountPath: /etc/postgresql/pg_hba.conf
+          subPath: pg_hba.conf
         readinessProbe:
           exec:
             command:
@@ -237,6 +283,9 @@ spec:
       volumes:
       - name: postgres-storage
         emptyDir: {}
+      - name: postgres-config
+        configMap:
+          name: postgres-config
 ---
 apiVersion: v1
 kind: Service
@@ -436,7 +485,7 @@ spec:
         - containerPort: 5000
         env:
         - name: DATABASE_URL
-          value: "postgresql://postgres:postgres123@postgres:5432/eduai"
+          value: "postgresql://postgres:postgres123@postgres:5432/eduai?sslmode=disable"
         - name: DB_HOST
           value: "postgres"
         - name: DB_PORT
@@ -447,6 +496,8 @@ spec:
           value: "postgres"
         - name: DB_PASSWORD
           value: "postgres123"
+        - name: DB_SSL_MODE
+          value: "disable"
         resources:
           requests:
             memory: "256Mi"
