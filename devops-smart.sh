@@ -172,7 +172,7 @@ ensure_cluster_health() {
 # 🗄️ POSTGRESQL DEPLOYMENT AND HEALTH CHECK
 # =============================================================================
 deploy_postgresql() {
-    log_step "Deploying PostgreSQL database..."
+    log_step "🔄 STEP: Deploying PostgreSQL database and Redis cache..."
     
     # Create namespace if needed
     minikube kubectl -- create namespace "$NAMESPACE" --dry-run=client -o yaml | minikube kubectl -- apply -f -
@@ -345,6 +345,101 @@ EOF
     fi
     
     log_success "PostgreSQL is ready"
+    
+    # Deploy Redis
+    log_info "Deploying Redis cache..."
+    cat <<EOF | minikube kubectl -- apply -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: $NAMESPACE
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: $NAMESPACE
+spec:
+  selector:
+    app: redis
+  type: ClusterIP
+  ports:
+  - port: 6379
+    targetPort: 6379
+EOF
+    
+    # Wait for Redis to be ready
+    log_info "Waiting for Redis to be ready..."
+    local redis_status=""
+    local max_wait=60
+    local wait_count=0
+    
+    while [ $wait_count -lt $max_wait ]; do
+        redis_status=$(minikube kubectl -- get pods -n "$NAMESPACE" -l app=redis -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
+        if [ "$redis_status" = "Running" ]; then
+            log_success "Redis is running"
+            break
+        fi
+        wait_count=$((wait_count + 5))
+        if [ $wait_count -lt $max_wait ]; then
+            echo -n "."
+            sleep 5
+        fi
+    done
+    
+    if [ $wait_count -ge $max_wait ]; then
+        log_warning "Redis taking longer than expected, but continuing..."
+    fi
+    
+    log_success "Redis is ready"
     return 0
 }
 
@@ -430,7 +525,7 @@ spec:
         image: eduai-frontend:latest
         imagePullPolicy: Never
         ports:
-        - containerPort: 80
+        - containerPort: 8080
         resources:
           requests:
             memory: "128Mi"
@@ -444,7 +539,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /
-            port: 80
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -452,7 +547,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 80
+            port: 8080
           initialDelaySeconds: 60
           periodSeconds: 15
           timeoutSeconds: 10
@@ -469,7 +564,7 @@ spec:
   type: NodePort
   ports:
   - port: 3000
-    targetPort: 80
+    targetPort: 8080
     nodePort: 30007
 EOF
     
@@ -514,6 +609,16 @@ spec:
           value: "postgres123"
         - name: DB_SSL_MODE
           value: "disable"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_DB
+          value: "0"
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "5000"
         resources:
           requests:
             memory: "256Mi"
