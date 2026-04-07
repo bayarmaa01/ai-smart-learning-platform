@@ -449,16 +449,16 @@ EOF
 smart_docker_build() {
     log_step "Building Docker images..."
     
-    # Check if images exist in Minikube Docker environment
-    local frontend_exists=$(minikube -p minikube docker images 2>/dev/null | grep eduai-frontend | wc -l)
-    local backend_exists=$(minikube -p minikube docker images 2>/dev/null | grep eduai-backend | wc -l)
+    # Check if images exist in Docker environment
+    local frontend_exists=$(docker images 2>/dev/null | grep eduai-frontend | wc -l)
+    local backend_exists=$(docker images 2>/dev/null | grep eduai-backend | wc -l)
     
     if [ "$FORCE_BUILD" = true ] || [ "$frontend_exists" -eq 0 ] || [ "$backend_exists" -eq 0 ]; then
         log_info "Force build requested, rebuilding all images"
         
         # Build frontend
         log_info "Building frontend image..."
-        if ! minikube -p minikube docker build -t eduai-frontend:latest ./frontend 2>&1; then
+        if ! docker build -t eduai-frontend:latest ./frontend 2>&1; then
             log_error "Failed to build frontend image"
             return 1
         fi
@@ -466,7 +466,7 @@ smart_docker_build() {
         
         # Build backend
         log_info "Building backend image..."
-        if ! minikube -p minikube docker build -t eduai-backend:latest ./backend 2>&1; then
+        if ! docker build -t eduai-backend:latest ./backend 2>&1; then
             log_error "Failed to build backend image"
             return 1
         fi
