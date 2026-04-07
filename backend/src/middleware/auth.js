@@ -79,4 +79,8 @@ const optionalAuth = async (req, res, next) => {
   }
 };
 
-module.exports = { verifyToken, authorize, optionalAuth };
+const authMiddleware = async (req, res, next) => {
+  await verifyToken(req, res, next);
+};
+
+module.exports = { verifyToken, authorize, optionalAuth, authMiddleware };
