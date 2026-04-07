@@ -290,13 +290,13 @@ services:
   # ArgoCD (GitOps CD)
   # ============================================================
   argocd-server:
-    image: argoproj/argocd:v2.10.2
+    image: argoproj/argocd:v2.9.0
     container_name: eduai-argocd-server
     restart: unless-stopped
     command:
       - --insecure
       - --port
-      - "8080"
+      - "8081"
       - --repo-server
       - "http://eduai-argocd-repo-server:8081"
       - --redis
@@ -313,6 +313,7 @@ services:
       - argocd_data:/app/config
       - ./argocd/ssh:/app/config/ssh
     ports:
+      - "8081:8081"
       - "8080:8080"
       - "3012:3012"
     depends_on:
@@ -328,7 +329,7 @@ services:
       start_period: 60s
 
   argocd-repo-server:
-    image: argoproj/argocd-repo-server:v2.10.2
+    image: argoproj/argocd-repo-server:v2.9.0
     container_name: eduai-argocd-repo-server
     restart: unless-stopped
     command:
@@ -369,7 +370,7 @@ services:
       retries: 5
 
   argocd-application-controller:
-    image: argoproj/argocd-application-controller:v2.10.2
+    image: argoproj/argocd-application-controller:v2.9.0
     container_name: eduai-argocd-application-controller
     restart: unless-stopped
     command:
