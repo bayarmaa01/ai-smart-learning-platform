@@ -71,11 +71,17 @@ const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
+      return res.status(401).json({
+        success: false,
+        error: 'No token provided'
+      });
     }
     await verifyToken(req, res, next);
-  } catch {
-    next();
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: 'Authentication error'
+    });
   }
 };
 
