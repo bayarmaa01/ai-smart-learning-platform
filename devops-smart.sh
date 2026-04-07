@@ -601,6 +601,10 @@ spec:
           value: "6379"
         - name: REDIS_DB
           value: "0"
+        - name: OLLAMA_URL
+          value: "http://host.minikube.internal:11434"
+        - name: OLLAMA_MODEL
+          value: "gemma:2b"
         - name: NODE_ENV
           value: "production"
         - name: PORT

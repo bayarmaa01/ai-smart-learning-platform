@@ -19,6 +19,7 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { resolveTenant } = require('./middleware/tenantMiddleware');
 const { logger } = require('./utils/logger');
 const routes = require('./routes');
+const aiRoutes = require('./routes/ai.routes');
 
 const app = express();
 const server = http.createServer(app);
@@ -95,6 +96,7 @@ app.get('/api/v1/health', (req, res) => {
 
 app.use(resolveTenant);
 app.use('/api/v1', routes);
+app.use('/api/v1/ai', aiRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
