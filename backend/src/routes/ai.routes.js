@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const AIController = require('../controllers/ai.controller');
 const { authMiddleware } = require('../middleware/auth');
-const { rateLimiter } = require('../middleware/rateLimiter');
+const rateLimiter = require('../middleware/rateLimiter');
 
 /**
  * AI Routes - Smart Learning Platform
