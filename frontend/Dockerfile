@@ -41,19 +41,17 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
     chown -R nginx-user:nginx-user /var/log/nginx && \
     chown -R nginx-user:nginx-user /var/run
 
-# Create nginx.conf with proper user and pid settings
-RUN echo "user nginx-user;" > /etc/nginx/nginx.conf && \
-    echo "worker_processes auto;" >> /etc/nginx/nginx.conf && \
+# Create custom nginx.conf without user directive (running as non-root)
+RUN echo "worker_processes auto;" > /etc/nginx/nginx.conf && \
     echo "error_log /var/log/nginx/error.log warn;" >> /etc/nginx/nginx.conf && \
-    echo "pid /var/run/nginx.pid;" >> /etc/nginx/nginx.conf && \
+    echo "pid /tmp/nginx.pid;" >> /etc/nginx/nginx.conf && \
     echo "events {" >> /etc/nginx/nginx.conf && \
     echo "    worker_connections 1024;" >> /etc/nginx/nginx.conf && \
     echo "}" >> /etc/nginx/nginx.conf && \
     echo "http {" >> /etc/nginx/nginx.conf && \
     echo "    include /etc/nginx/conf.d/*.conf;" >> /etc/nginx/nginx.conf && \
-    echo "}" >> /etc/nginx/nginx.conf
-
-USER nginx-user
+    echo "}" >> /etc/nginx/nginx.conf && \
+    chown -R nginx-user:nginx-user /tmp /var/log/nginx /etc/nginx
 
 EXPOSE 8080
 

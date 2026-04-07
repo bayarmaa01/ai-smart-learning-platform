@@ -444,38 +444,19 @@ EOF
 }
 
 # =============================================================================
-# 🐳 SMART DOCKER BUILD
+# 🧠 SMART DOCKER BUILD
 # =============================================================================
 smart_docker_build() {
     log_step "Building Docker images..."
     
     # Check if images exist in Minikube Docker environment
-    eval $(minikube docker-env)
-    local frontend_exists=false
-    local backend_exists=false
+    local frontend_exists=$(minikube -p minikube docker images 2>/dev/null | grep eduai-frontend | wc -l)
+    local backend_exists=$(minikube -p minikube docker images 2>/dev/null | grep eduai-backend | wc -l)
     
-    if docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "eduai-frontend:latest"; then
-        frontend_exists=true
-    fi
-    
-    if docker images --format "table {{.Repository}}:{{.Tag}}" | grep -q "eduai-backend:latest"; then
-        backend_exists=true
-    fi
-    
-    # Force rebuild if requested
-    if [ "$FORCE_BUILD" = true ]; then
+    if [ "$FORCE_BUILD" = true ] || [ "$frontend_exists" -eq 0 ] || [ "$backend_exists" -eq 0 ]; then
         log_info "Force build requested, rebuilding all images"
-        if [ "$frontend_exists" = true ]; then
-            docker rmi eduai-frontend:latest >/dev/null 2>&1 || true
-            frontend_exists=false
-        fi
-        if [ "$backend_exists" = true ]; then
-            docker rmi eduai-backend:latest >/dev/null 2>&1 || true
-            backend_exists=false
-        fi
-    fi
-    
-    # Build frontend if needed
+        
+        # Build frontend
     if [ "$frontend_exists" = false ] && [ -d "frontend" ]; then
         log_info "Building frontend image..."
         retry 3 docker build -t eduai-frontend:latest ./frontend

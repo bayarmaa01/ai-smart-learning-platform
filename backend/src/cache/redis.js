@@ -4,28 +4,54 @@ const { logger } = require('../utils/logger');
 let client;
 
 const connectRedis = async () => {
-  client = createClient({
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    socket: {
-      reconnectStrategy: (retries) => {
-        if (retries > 10) {
-          logger.error('Redis: max reconnection attempts reached');
-          return new Error('Max reconnection attempts reached');
-        }
-        return Math.min(retries * 100, 3000);
+  const redisHost = process.env.REDIS_HOST || 'redis';
+  const redisPort = process.env.REDIS_PORT || '6379';
+  const redisDb = process.env.REDIS_DB || '0';
+  
+  try {
+    client = createClient({
+      url: `redis://${redisHost}:${redisPort}/${redisDb}`,
+      socket: {
+        reconnectStrategy: (retries) => {
+          if (retries > 10) {
+            logger.error('Redis: max reconnection attempts reached');
+            return new Error('Max reconnection attempts reached');
+          }
+          return Math.min(retries * 100, 3000);
+        },
       },
-    },
-  });
+    });
 
-  client.on('error', (err) => logger.error('Redis Client Error:', err));
-  client.on('connect', () => logger.info('Redis connected'));
-  client.on('reconnecting', () => logger.warn('Redis reconnecting...'));
+    client.on('error', (err) => logger.error('Redis Client Error:', err));
+    client.on('connect', () => logger.info('Redis connected'));
+    client.on('reconnecting', () => logger.warn('Redis reconnecting...'));
 
-  await client.connect();
+    await client.connect();
+    logger.info(`Redis connecting to: ${redisHost}:${redisPort}/${redisDb}`);
+  } catch (err) {
+    logger.error('Failed to initialize Redis client:', err);
+    // Create a mock client for graceful degradation
+    client = {
+      get: async () => null,
+      set: async () => {},
+      del: async () => {},
+      keys: async () => [],
+      incr: async () => 0,
+      expire: async () => {},
+      setEx: async () => {},
+      on: () => {},
+      connect: async () => {},
+      isReady: () => false
+    };
+    logger.warn('Redis disabled - running without cache');
+  }
 };
 
 const getCache = async (key) => {
   try {
+    if (!client || typeof client.get !== 'function') {
+      return null;
+    }
     const data = await client.get(key);
     return data ? JSON.parse(data) : null;
   } catch (err) {
@@ -36,6 +62,10 @@ const getCache = async (key) => {
 
 const setCache = async (key, value, ttlSeconds = 3600) => {
   try {
+    if (!client || typeof client.setEx !== 'function') {
+      logger.warn('Redis not available - cache disabled');
+      return;
+    }
     await client.setEx(key, ttlSeconds, JSON.stringify(value));
   } catch (err) {
     logger.error('Redis SET error:', err);
@@ -44,6 +74,9 @@ const setCache = async (key, value, ttlSeconds = 3600) => {
 
 const deleteCache = async (key) => {
   try {
+    if (!client || typeof client.del !== 'function') {
+      return;
+    }
     await client.del(key);
   } catch (err) {
     logger.error('Redis DEL error:', err);
@@ -52,6 +85,9 @@ const deleteCache = async (key) => {
 
 const deleteCachePattern = async (pattern) => {
   try {
+    if (!client || typeof client.keys !== 'function') {
+      return;
+    }
     const keys = await client.keys(pattern);
     if (keys.length > 0) {
       await client.del(keys);
@@ -63,8 +99,11 @@ const deleteCachePattern = async (pattern) => {
 
 const incrementCounter = async (key, ttlSeconds = 3600) => {
   try {
+    if (!client || typeof client.incr !== 'function') {
+      return 0;
+    }
     const count = await client.incr(key);
-    if (count === 1) {
+    if (count === 1 && typeof client.expire === 'function') {
       await client.expire(key, ttlSeconds);
     }
     return count;
