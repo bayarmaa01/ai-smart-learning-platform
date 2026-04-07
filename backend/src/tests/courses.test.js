@@ -2,6 +2,7 @@ const request = require('supertest');
 const { app } = require('../server');
 const { query } = require('../db/connection');
 const redisClient = require('../cache/redis');
+const { authMiddleware } = require('../middleware/auth');
 const jwt = require('jsonwebtoken');
 
 jest.mock('../db/connection');
