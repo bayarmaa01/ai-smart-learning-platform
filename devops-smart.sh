@@ -457,22 +457,27 @@ smart_docker_build() {
         log_info "Force build requested, rebuilding all images"
         
         # Build frontend
-    if [ "$frontend_exists" = false ] && [ -d "frontend" ]; then
         log_info "Building frontend image..."
-        retry 3 docker build -t eduai-frontend:latest ./frontend
+        if ! minikube -p minikube docker build -t eduai-frontend:latest ./frontend 2>&1; then
+            log_error "Failed to build frontend image"
+            return 1
+        fi
         log_success "Frontend image built"
-    elif [ "$frontend_exists" = true ]; then
-        log_info "Frontend image already exists, skipping build"
+        
+        # Build backend
+        log_info "Building backend image..."
+        if ! minikube -p minikube docker build -t eduai-backend:latest ./backend 2>&1; then
+            log_error "Failed to build backend image"
+            return 1
+        fi
+        log_success "Backend image built"
+        
+        log_success "All images built successfully"
+    else
+        log_info "Images already exist, skipping build (use --force-build to rebuild)"
     fi
     
-    # Build backend if needed
-    if [ "$backend_exists" = false ] && [ -d "backend" ]; then
-        log_info "Building backend image..."
-        retry 3 docker build -t eduai-backend:latest ./backend
-        log_success "Backend image built"
-    elif [ "$backend_exists" = true ]; then
-        log_info "Backend image already exists, skipping build"
-    fi
+    return 0
 }
 
 # =============================================================================
