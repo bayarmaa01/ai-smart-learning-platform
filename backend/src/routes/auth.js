@@ -16,10 +16,8 @@ const authLimiter = rateLimit({
 
 const registerValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
-  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain uppercase, lowercase, and number'),
-  body('firstName').trim().isLength({ min: 1, max: 100 }).withMessage('First name is required'),
-  body('lastName').trim().isLength({ min: 1, max: 100 }).withMessage('Last name is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('name').trim().isLength({ min: 1, max: 100 }).withMessage('Name is required'),
 ];
 
 const loginValidation = [
