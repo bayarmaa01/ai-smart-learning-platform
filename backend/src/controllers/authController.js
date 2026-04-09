@@ -24,10 +24,10 @@ const generateTokens = (userId, role, tenantId) => {
 };
 
 const register = async (req, res) => {
-  const { email, password, firstName, lastName, role = 'student', tenantId } = req.body;
+  const { email, password, name, role = 'student', tenantId } = req.body;
 
   // Validation
-  if (!email || !password || !firstName || !lastName) {
+  if (!email || !password || !name) {
     throw new AppError('All fields are required', 400, 'VALIDATION_ERROR');
   }
 
@@ -35,9 +35,14 @@ const register = async (req, res) => {
     throw new AppError('Invalid email format', 400, 'INVALID_EMAIL');
   }
 
-  if (password.length < 8) {
-    throw new AppError('Password must be at least 8 characters', 400, 'PASSWORD_TOO_SHORT');
+  if (password.length < 6) {
+    throw new AppError('Password must be at least 6 characters', 400, 'PASSWORD_TOO_SHORT');
   }
+
+  // Split name into firstName and lastName
+  const nameParts = name.trim().split(/\s+/);
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || 'User';
 
   if (!['student', 'instructor'].includes(role)) {
     throw new AppError('Invalid role. Must be student or instructor', 400, 'INVALID_ROLE');

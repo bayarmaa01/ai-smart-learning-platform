@@ -1,53 +1,54 @@
 #!/bin/bash
 
-set -euo pipefail
+# AI Smart Learning Platform - Production DevOps Script
+# Supports WSL2 + Minikube + Cloudflare Tunnel
+# Usage: ./devops-smart.sh [full|fast]
 
-# =============================================================================
-# 🧠 AI SMART LEARNING PLATFORM - INTELLIGENT DEVOPS (PRODUCTION-GRADE)
-# =============================================================================
+set -euo pipefail
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
 # Configuration
-DOMAIN="ailearn.duckdns.org"
-TUNNEL_CONFIG_DIR="$HOME/.cloudflared"
 NAMESPACE="eduai"
-MODE=""
-FAST_MODE_TIMEOUT=60
-FULL_MODE_TIMEOUT=300
-DEFAULT_K8S_VERSION="v1.34.0"
+DOMAIN="ailearn.duckdns.org"
+TUNNEL_NAME="eduai-tunnel"
+FRONTEND_NODEPORT=30007
+BACKEND_NODEPORT=30008
+MINIKUBE_IP=""
+
+# Logging functions
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "${PURPLE}[STEP]${NC} $1"; }
 
 # Parse arguments
-FORCE_BUILD=false
-RESET_CLUSTER=false
-SHOW_STATUS=false
-AUTO_FORWARD=false
-
+MODE="full"
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --fast)
-            MODE="FAST"
+        full)
+            MODE="full"
             shift
             ;;
-        --full)
-            MODE="FULL"
+        fast)
+            MODE="fast"
             shift
             ;;
-        --reset)
-            RESET_CLUSTER=true
-            shift
+        *)
+            log_error "Invalid argument: $1"
+            log_info "Usage: $0 [full|fast]"
+            exit 1
             ;;
-        --status)
-            SHOW_STATUS=true
-            shift
-            ;;
-        --forward)
+    esac
+done
             AUTO_FORWARD=true
             shift
             ;;

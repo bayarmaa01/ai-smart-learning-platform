@@ -46,7 +46,12 @@ const query = async (text, params) => {
   }
 };
 
-const getClient = () => pool.connect();
+const getClient = async () => {
+  if (!pool) {
+    await connectDB();
+  }
+  return pool.connect();
+};
 
 const transaction = async (callback) => {
   const client = await pool.connect();
