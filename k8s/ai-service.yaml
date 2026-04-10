@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: eduai
+  labels:
+    app: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+      - name: ai-service
+        image: python:3.9-slim
+        command: ["/bin/sh"]
+        args: ["-c", "pip install flask requests && python /app/ai_server.py"]
+        ports:
+        - containerPort: 8000
+        env:
+        - name: OLLAMA_URL
+          value: "http://host.minikube.internal:11434"
+        - name: MODEL_NAME
+          value: "gemma4:31b-cloud"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: ai-code
+          mountPath: /app
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: ai-code
+        configMap:
+          name: ai-service-code
+      - name: tmp
+        emptyDir: {}
+      restartPolicy: Always
+      
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: eduai
+  labels:
+    app: ai-service
+spec:
+  selector:
+    app: ai-service
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-service-code
+  namespace: eduai
+data:
+  ai_server.py: |
+    from flask import Flask, request, jsonify
+    import requests
+    import os
+    from datetime import datetime
+    
+    app = Flask(__name__)
+    
+    OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://host.minikube.internal:11434')
+    MODEL_NAME = os.getenv('MODEL_NAME', 'gemma')
+    
+    @app.route('/health', methods=['GET'])
+    def health():
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'service': 'ai-service',
+            'model': MODEL_NAME,
+            'ollama_url': OLLAMA_URL
+        })
+    
+    @app.route('/api/v1/ai/chat', methods=['POST'])
+    def chat():
+        try:
+            data = request.get_json()
+            if not data or 'message' not in data:
+                return jsonify({'error': 'Message is required'}), 400
+            
+            message = data['message']
+            
+            # Call Ollama API
+            response = requests.post(
+                f'{OLLAMA_URL}/api/generate',
+                json={
+                    'model': MODEL_NAME,
+                    'prompt': message,
+                    'stream': False
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                return jsonify({
+                    'success': True,
+                    'response': result.get('response', ''),
+                    'model': MODEL_NAME
+                })
+            else:
+                return jsonify({
+                    'error': f'Ollama API error: {response.status_code}'
+                }), 500
+                
+        except requests.exceptions.Timeout:
+            return jsonify({'error': 'Request timeout'}), 504
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/api/v1/ai/models', methods=['GET'])
+    def list_models():
+        try:
+            response = requests.get(f'{OLLAMA_URL}/api/tags', timeout=10)
+            if response.status_code == 200:
+                models = response.json().get('models', [])
+                return jsonify({
+                    'success': True,
+                    'models': models
+                })
+            else:
+                return jsonify({'error': 'Failed to fetch models'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/metrics', methods=['GET'])
+    def metrics():
+        return jsonify({
+            '# HELP ai_service_requests_total Total number of AI service requests',
+            '# TYPE ai_service_requests_total counter',
+            'ai_service_requests_total 0',
+            '# HELP ai_service_up Service health status',
+            '# TYPE ai_service_up gauge',
+            'ai_service_up 1'
+        })
+    
+    if __name__ == '__main__':
+        app.run(host='0.0.0.0', port=8000, debug=False)
