@@ -1,0 +1,67 @@
+{
+  "workspace": "~/.openclaw/workspace",
+  "model": "ollama/gemma4:31b-cloud",
+  "fallbackModels": ["ollama/gemma3"],
+  "modelProviders": {
+    "ollama": {
+      "baseUrl": "http://127.0.0.1:11434",
+      "enabled": true,
+      "priority": 1,
+      "timeout": 30000,
+      "retries": 3,
+      "retryDelay": 5000
+    },
+    "google": {
+      "enabled": false,
+      "priority": 999
+    },
+    "openai": {
+      "enabled": false,
+      "priority": 999
+    },
+    "anthropic": {
+      "enabled": false,
+      "priority": 999
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "port": 18789,
+    "bind": "127.0.0.1",
+    "auth": {
+      "type": "token"
+    }
+  },
+  "skills": {
+    "nodeManager": "npm"
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "dmPolicy": "allowlist",
+      "allowFrom": ["+917658055233"],
+      "personalPhone": true
+    }
+  },
+  "webSearch": {
+    "provider": "ollama",
+    "enabled": true
+  },
+  "performance": {
+    "lowLatency": true,
+    "localInference": true,
+    "cacheEnabled": true,
+    "batchRequests": false
+  },
+  "reliability": {
+    "autoRestart": true,
+    "healthCheckInterval": 30000,
+    "maxRetries": 3,
+    "fallbackEnabled": true
+  },
+  "security": {
+    "disableExternalAPIs": true,
+    "localOnly": true,
+    "noApiQuota": true
+  }
+}
