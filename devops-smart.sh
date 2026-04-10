@@ -24,6 +24,10 @@ FRONTEND_NODEPORT=30007
 BACKEND_NODEPORT=30008
 MINIKUBE_IP=""
 
+# Timeout configurations
+FULL_MODE_TIMEOUT=300
+FAST_MODE_TIMEOUT=120
+
 # Logging functions
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
