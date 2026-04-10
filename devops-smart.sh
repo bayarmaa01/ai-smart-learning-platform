@@ -32,23 +32,30 @@ log_step() { echo -e "${PURPLE}[STEP]${NC} $1"; }
 
 # Parse arguments
 MODE="full"
+RESET_CLUSTER=false
+SHOW_STATUS=false
+AUTO_FORWARD=false
+FORCE_BUILD=false
+
 while [[ $# -gt 0 ]]; do
     case $1 in
-        full)
+        full|--full)
             MODE="full"
             shift
             ;;
-        fast)
+        fast|--fast)
             MODE="fast"
             shift
             ;;
-        *)
-            log_error "Invalid argument: $1"
-            log_info "Usage: $0 [full|fast]"
-            exit 1
+        --reset)
+            RESET_CLUSTER=true
+            shift
             ;;
-    esac
-done
+        --status)
+            SHOW_STATUS=true
+            shift
+            ;;
+        --forward)
             AUTO_FORWARD=true
             shift
             ;;
