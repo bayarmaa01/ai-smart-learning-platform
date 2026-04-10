@@ -34,8 +34,8 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: backend
-          image: bayarmaa/eduai-backend:latest
-          imagePullPolicy: Always
+          image: eduai-backend:latest
+          imagePullPolicy: Never
           ports:
             - containerPort: 5000
               name: http

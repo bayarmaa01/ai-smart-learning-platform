@@ -30,7 +30,7 @@ spec:
         - name: OLLAMA_URL
           value: "http://host.minikube.internal:11434"
         - name: MODEL_NAME
-          value: "gemma"
+          value: "gemma4:31b-cloud"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

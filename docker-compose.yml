@@ -23,7 +23,7 @@ services:
     container_name: eduai-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: eduai_db
+      POSTGRES_DB: eduai
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:-eduai_secure_pass}
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
@@ -35,7 +35,7 @@ services:
     networks:
       - eduai-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d eduai_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d eduai"]
       interval: 10s
       timeout: 5s
       retries: 5

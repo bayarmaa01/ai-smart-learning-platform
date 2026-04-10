@@ -16,8 +16,8 @@ RUN npm ci --only=production && \
 # Stage 2: Production
 FROM node:20-alpine AS production
 
-# Security: install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Security: install dumb-init and curl for health checks
+RUN apk add --no-cache dumb-init curl
 
 # Non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -41,7 +41,7 @@ EXPOSE 5000
 ENV NODE_ENV=production
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:5000/health || exit 1
+    CMD curl -f http://localhost:5000/health || exit 1
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "src/server.js"]
