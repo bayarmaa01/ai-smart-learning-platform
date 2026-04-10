@@ -1052,10 +1052,10 @@ main() {
     
     # Execute based on mode
     case "$MODE" in
-        "FAST")
+        "fast")
             execute_fast_mode
             ;;
-        "FULL")
+        "full")
             execute_full_mode
             ;;
         "")
