@@ -106,11 +106,10 @@ const courseSlice = createSlice({
       .addCase(fetchMyCourses.fulfilled, (state, action) => {
         state.myCourses = action.payload;
       })
-      .addCase(enrollCourse.fulfilled, (state, action) => {
+      .addCase(enrollCourse.fulfilled, (state, _action) => {
         if (state.currentCourse) {
           state.currentCourse.isEnrolled = true;
         }
-        // eslint-disable-next-line no-unused-vars
       });
   },
 });

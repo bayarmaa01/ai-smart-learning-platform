@@ -1,6 +1,8 @@
 const { Pool } = require('pg');
 const { logger } = require('../utils/logger');
 
+const NOW = 'NOW()';
+
 const pool = new Pool({
   host: process.env.DB_HOST || 'postgres',
   port: parseInt(process.env.DB_PORT) || 5432,
