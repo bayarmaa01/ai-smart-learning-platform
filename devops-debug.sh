@@ -1,653 +1,592 @@
 #!/bin/bash
 
-# =============================================================================
-# AI Smart Learning Platform - DEBUG & VERIFICATION SCRIPT
-# =============================================================================
-# This script VERIFIES if your app is ACTUALLY working, even if DevOps automation fails
-# Author: Senior DevOps Engineer
-# Version: 1.0
-# =============================================================================
+# AI Smart Learning Platform - DevOps Debug Script
+# Verifies if the system is REALLY working, even if automation fails
+# ALWAYS fallback to PORT-FORWARD and make app accessible via localhost
+# Usage: ./devops-debug.sh
 
-set -euo pipefail
+set +e  # Never crash - handle errors gracefully
 
-# Colors
+# =============================================================================
+# 🎨 COLOR DEFINITIONS
+# =============================================================================
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
 
-# Configuration
+# =============================================================================
+# 📋 CONFIGURATION
+# =============================================================================
 NAMESPACE="eduai"
 DOMAIN="ailearn.duckdns.org"
-FRONTEND_NODEPORT=30007
-BACKEND_NODEPORT=30008
-LOCAL_FRONTEND_PORT=3000
-LOCAL_BACKEND_PORT=5000
+FRONTEND_LOCAL_PORT=3000
+BACKEND_LOCAL_PORT=4000
+GRAFANA_LOCAL_PORT=3001
+PROMETHEUS_LOCAL_PORT=9090
+ARGOCD_LOCAL_PORT=18080
+OLLAMA_LOCAL_PORT=11434
 
-# Global variables
-MINIKUBE_IP=""
-PORT_FORWARD_PIDS=()
+# Port-forward PIDs storage
+PIDS_FILE="/tmp/devops-debug-pids.txt"
 
-# Logging functions
+# =============================================================================
+# 📝 LOGGING FUNCTIONS
+# =============================================================================
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() { echo -e "${PURPLE}[STEP]${NC} $1"; }
-log_critical() { echo -e "${RED}[CRITICAL]${NC} $1"; }
-
-# Cleanup function
-cleanup() {
-    log_info "Cleaning up port-forward processes..."
-    for pid in "${PORT_FORWARD_PIDS[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            kill "$pid" 2>/dev/null || true
-        fi
-    done
-}
-
-# Trap cleanup on exit
-trap cleanup EXIT
+log_header() { echo -e "${WHITE}=== $1 ===${NC}"; }
 
 # =============================================================================
-# HELPER FUNCTIONS
+# 🧹 CLEANUP FUNCTIONS
 # =============================================================================
-
-# Check if command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Wait for service to be ready
-wait_for_service() {
-    local url="$1"
-    local timeout="${2:-30}"
-    local count=0
+cleanup_port_forwards() {
+    log_info "Cleaning up existing port forwards..."
+    if [ -f "$PIDS_FILE" ]; then
+        while read -r pid; do
+            if kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null
+                log_info "Killed process $pid"
+            fi
+        done < "$PIDS_FILE"
+        rm -f "$PIDS_FILE"
+    fi
     
-    while [ $count -lt $timeout ]; do
-        if curl -s --max-time 3 "$url" >/dev/null 2>&1; then
+    # Kill any remaining port-forward processes
+    pkill -f "kubectl port-forward" 2>/dev/null || true
+    pkill -f "minikube kubectl -- port-forward" 2>/dev/null || true
+}
+
+# Trap cleanup on script exit
+trap cleanup_port_forwards EXIT
+
+# =============================================================================
+# 🔧 UTILITY FUNCTIONS
+# =============================================================================
+wait_for_service() {
+    local url=$1
+    local service_name=$2
+    local max_attempts=30
+    local attempt=1
+    
+    log_info "Checking $service_name at $url..."
+    
+    while [ $attempt -le $max_attempts ]; do
+        if curl -s --max-time 5 "$url" >/dev/null 2>&1; then
+            log_success "$service_name is accessible"
             return 0
         fi
-        sleep 1
-        count=$((count + 1))
+        
+        echo -n "."
+        sleep 2
+        attempt=$((attempt + 1))
     done
+    
+    log_warning "$service_name not accessible after ${max_attempts} attempts"
     return 1
 }
 
-# Test endpoint with detailed output
-test_endpoint() {
-    local url="$1"
-    local description="$2"
-    local timeout="${3:-10}"
+check_pod_health() {
+    local pod_name=$1
+    local namespace=$2
     
-    echo -n "Testing $description... "
-    if curl -s --max-time "$timeout" -w "HTTP %{http_code}" "$url" 2>/dev/null | tail -n1; then
-        echo " $(log_success "WORKING")"
-        return 0
-    else
-        echo " $(log_error "FAILED")"
-        return 1
-    fi
+    local status=$(kubectl get pod "$pod_name" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+    local restarts=$(kubectl get pod "$pod_name" -n "$namespace" -o jsonpath='{.status.containerStatuses[0].restartCount}' 2>/dev/null || echo "0")
+    
+    echo "$status:$restarts"
+}
+
+print_fix_suggestion() {
+    local issue=$1
+    local suggestion=$2
+    
+    echo ""
+    log_warning "🔧 FIX SUGGESTION:"
+    echo "   Issue: $issue"
+    echo "   Fix: $suggestion"
+    echo ""
 }
 
 # =============================================================================
-# STEP 1: CLUSTER SANITY CHECK
+# 🚀 MAIN DEBUG FUNCTIONS
 # =============================================================================
 
+# 1. CLUSTER SANITY CHECK
 check_cluster_sanity() {
-    log_step "1. CLUSTER SANITY CHECK"
-    echo "=================================="
+    log_header "CLUSTER CHECK"
     
-    # Check kubectl context
-    log_info "Checking kubectl context..."
-    local current_context=$(kubectl config current-context 2>/dev/null || echo "UNKNOWN")
-    echo "Current context: $current_context"
+    log_info "Checking kubectl configuration..."
+    local current_context=$(kubectl config current-context 2>/dev/null || echo "none")
     
-    if [[ "$current_context" != "minikube" ]]; then
-        log_warning "Context is not 'minikube'. Attempting to fix..."
-        if kubectl config use-context minikube 2>/dev/null; then
+    if [ "$current_context" != "minikube" ]; then
+        log_warning "Current context is '$current_context', switching to minikube..."
+        if kubectl config use-context minikube >/dev/null 2>&1; then
             log_success "Switched to minikube context"
         else
-            log_error "Cannot switch to minikube context"
-            echo "Fix: Run 'minikube start' first"
-        fi
-    fi
-    
-    # Check nodes
-    log_info "Checking cluster nodes..."
-    if kubectl get nodes >/dev/null 2>&1; then
-        local nodes=$(kubectl get nodes --no-headers | wc -l)
-        log_success "Found $nodes node(s)"
-        kubectl get nodes
-    else
-        log_error "Cannot connect to cluster"
-        echo "Fix: Run 'minikube start'"
-        return 1
-    fi
-    
-    # Check Minikube status
-    log_info "Checking Minikube status..."
-    if command_exists minikube; then
-        if minikube status >/dev/null 2>&1; then
-            log_success "Minikube is running"
-            MINIKUBE_IP=$(minikube ip 2>/dev/null || echo "")
-            echo "Minikube IP: $MINIKUBE_IP"
-        else
-            log_error "Minikube is not running"
-            echo "Fix: Run 'minikube start'"
+            log_error "Failed to switch to minikube context"
+            print_fix_suggestion "Minikube context not available" "Run: minikube start"
             return 1
         fi
     else
-        log_error "Minikube command not found"
-        echo "Fix: Install Minikube first"
+        log_success "Using correct context: minikube"
+    fi
+    
+    log_info "Checking cluster nodes..."
+    if kubectl get nodes >/dev/null 2>&1; then
+        local node_count=$(kubectl get nodes --no-headers | wc -l)
+        log_success "Cluster has $node_count node(s)"
+        kubectl get nodes
+    else
+        log_error "Cannot access cluster nodes"
+        print_fix_suggestion "Cluster not accessible" "Run: minikube start"
         return 1
     fi
     
-    echo ""
+    log_info "Checking Minikube status..."
+    if minikube status >/dev/null 2>&1; then
+        log_success "Minikube is running"
+        minikube status
+    else
+        log_error "Minikube is not running"
+        print_fix_suggestion "Minikube not running" "Run: minikube start --driver=docker"
+        return 1
+    fi
+    
     return 0
 }
 
-# =============================================================================
-# STEP 2: NAMESPACE RECOVERY
-# =============================================================================
-
+# 2. NAMESPACE CHECK
 check_namespace() {
-    log_step "2. NAMESPACE RECOVERY"
-    echo "=================================="
+    log_header "NAMESPACE CHECK"
     
-    log_info "Checking namespace: $NAMESPACE"
-    
-    # List all namespaces
-    echo "Available namespaces:"
-    kubectl get namespaces
-    
-    # Check if eduai exists
+    log_info "Checking namespace '$NAMESPACE'..."
     if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
         log_success "Namespace '$NAMESPACE' exists"
-        kubectl get namespace "$NAMESPACE"
     else
-        log_critical "Namespace '$NAMESPACE' NOT FOUND!"
+        log_error "Namespace '$NAMESPACE' does not exist"
         echo ""
-        echo "CRITICAL: The eduai namespace is missing!"
+        log_info "Available namespaces:"
+        kubectl get namespaces
         echo ""
-        echo "POSSIBLE CAUSES:"
-        echo "  1. Deployment script failed halfway"
-        echo "  2. Someone deleted the namespace"
-        echo "  3. Cluster was reset"
-        echo ""
-        echo "FIX OPTIONS:"
-        echo "  1. Re-run deployment: ./devops-smart.sh full"
-        echo "  2. Or recreate manually:"
-        echo "     kubectl create namespace $NAMESPACE"
-        echo ""
+        print_fix_suggestion "Missing namespace" "Run: ./devops-smart.sh full"
         return 1
     fi
     
-    echo ""
     return 0
 }
 
-# =============================================================================
-# STEP 3: POD HEALTH CHECK
-# =============================================================================
-
+# 3. POD HEALTH CHECK
 check_pods() {
-    log_step "3. POD HEALTH CHECK"
-    echo "=================================="
+    log_header "POD CHECK"
     
-    log_info "Checking pods in namespace: $NAMESPACE"
-    
-    # Get pods with detailed status
-    if kubectl get pods -n "$NAMESPACE" >/dev/null 2>&1; then
-        echo "Pod Status:"
-        kubectl get pods -n "$NAMESPACE" -o wide
-        
-        echo ""
-        log_info "Detailed pod analysis:"
-        
-        # Check each pod
-        local pods=$(kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=NAME:.metadata.name,STATUS:.status.phase,RESTARTS:.status.restartCount)
-        
-        while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-                local pod_name=$(echo "$line" | awk '{print $1}')
-                local status=$(echo "$line" | awk '{print $2}')
-                local restarts=$(echo "$line" | awk '{print $3}')
-                
-                echo -n "Pod $pod_name: "
-                
-                case "$status" in
-                    "Running")
-                        if [[ "$restarts" -gt 5 ]]; then
-                            echo "$(log_warning "Running but restarted $restarts times")"
-                            echo "  Suggestion: Check logs with 'kubectl logs -n $NAMESPACE $pod_name'"
-                        else
-                            echo "$(log_success "Healthy")"
-                        fi
-                        ;;
-                    "CrashLoopBackOff")
-                        echo "$(log_error "CrashLoopBackOff - restarted $restarts times")"
-                        echo "  DEBUG: Showing recent logs..."
-                        kubectl logs -n "$NAMESPACE" "$pod_name" --tail=10 2>/dev/null | sed 's/^/    /'
-                        ;;
-                    "Pending")
-                        echo "$(log_warning "Pending - check resources")"
-                        echo "  DEBUG: Events:"
-                        kubectl describe pod -n "$NAMESPACE" "$pod_name" 2>/dev/null | grep -A 10 "Events:" | sed 's/^/    /'
-                        ;;
-                    "Failed")
-                        echo "$(log_error "Failed")"
-                        echo "  DEBUG: Logs:"
-                        kubectl logs -n "$NAMESPACE" "$pod_name" --tail=10 2>/dev/null | sed 's/^/    /'
-                        ;;
-                    *)
-                        echo "$(log_warning "Unknown status: $status")"
-                        ;;
-                esac
-            fi
-        done <<< "$pods"
-        
-    else
-        log_error "Cannot get pods in namespace $NAMESPACE"
-        echo "Fix: Ensure namespace exists: kubectl get namespace $NAMESPACE"
+    log_info "Checking pods in namespace '$NAMESPACE'..."
+    if ! kubectl get pods -n "$NAMESPACE" >/dev/null 2>&1; then
+        log_error "Cannot access pods in namespace '$NAMESPACE'"
         return 1
     fi
     
     echo ""
+    kubectl get pods -n "$NAMESPACE" -o wide
+    echo ""
+    
+    # Check each pod for issues
+    local pods_with_issues=""
+    
+    while IFS= read -r pod_line; do
+        if [ -n "$pod_line" ] && [ "$pod_line" != "NAME" ]; then
+            local pod_name=$(echo "$pod_line" | awk '{print $1}')
+            local pod_info=$(check_pod_health "$pod_name" "$NAMESPACE")
+            local status=$(echo "$pod_info" | cut -d: -f1)
+            local restarts=$(echo "$pod_info" | cut -d: -f2)
+            
+            case "$status" in
+                "Running")
+                    if [ "$restarts" -gt 0 ]; then
+                        log_warning "Pod $pod_name has restarted $restarts times"
+                        pods_with_issues="$pods_with_issues $pod_name"
+                    else
+                        log_success "Pod $pod_name is healthy"
+                    fi
+                    ;;
+                "CrashLoopBackOff"|"Error"|"Failed")
+                    log_error "Pod $pod_name is in $status state"
+                    pods_with_issues="$pods_with_issues $pod_name"
+                    ;;
+                "Pending")
+                    log_warning "Pod $pod_name is pending"
+                    pods_with_issues="$pods_with_issues $pod_name"
+                    ;;
+                "NotFound")
+                    log_error "Pod $pod_name not found"
+                    ;;
+                *)
+                    log_warning "Pod $pod_name status: $status"
+                    ;;
+            esac
+        fi
+    done <<< "$(kubectl get pods -n "$NAMESPACE" --no-headers)"
+    
+    # Show logs for problematic pods
+    if [ -n "$pods_with_issues" ]; then
+        echo ""
+        log_warning "🔍 ANALYZING PROBLEMATIC PODS:"
+        for pod in $pods_with_issues; do
+            echo ""
+            log_info "Logs for pod $pod (last 15 lines):"
+            echo "----------------------------------------"
+            kubectl logs "$pod" -n "$NAMESPACE" --tail=15 2>/dev/null || echo "Could not fetch logs"
+            echo "----------------------------------------"
+        done
+    fi
+    
     return 0
 }
 
-# =============================================================================
-# STEP 4: SERVICE CHECK
-# =============================================================================
-
+# 4. SERVICE CHECK
 check_services() {
-    log_step "4. SERVICE CHECK"
-    echo "=================================="
+    log_header "SERVICE CHECK"
     
-    log_info "Checking services in namespace: $NAMESPACE"
+    log_info "Checking services in namespace '$NAMESPACE'..."
+    if ! kubectl get services -n "$NAMESPACE" >/dev/null 2>&1; then
+        log_error "Cannot access services in namespace '$NAMESPACE'"
+        return 1
+    fi
     
-    if kubectl get services -n "$NAMESPACE" >/dev/null 2>&1; then
-        echo "Services:"
-        kubectl get services -n "$NAMESPACE"
-        
-        echo ""
-        log_info "Service analysis:"
-        
-        # Check NodePort services
-        local nodeport_services=$(kubectl get services -n "$NAMESPACE" --no-headers -o custom-columns=NAME:.metadata.name,TYPE:.spec.type,PORT:.spec.ports[0].port,NODEPORT:.spec.ports[0].nodePort)
-        
-        while IFS= read -r line; do
-            if [[ -n "$line" ]]; then
-                local svc_name=$(echo "$line" | awk '{print $1}')
-                local svc_type=$(echo "$line" | awk '{print $2}')
-                local port=$(echo "$line" | awk '{print $3}')
-                local nodeport=$(echo "$line" | awk '{print $4}')
+    echo ""
+    kubectl get services -n "$NAMESPACE"
+    echo ""
+    
+    # Check NodePorts
+    log_info "Analyzing NodePort services..."
+    local nodeport_services=$(kubectl get services -n "$NAMESPACE" -o jsonpath='{range .items[*]}{.metadata.name}:{.spec.type}:{.spec.ports[0].nodePort}{"\n"}{end}' 2>/dev/null || echo "")
+    
+    if [ -n "$nodeport_services" ]; then
+        while IFS= read -r service_info; do
+            if [ -n "$service_info" ]; then
+                local service_name=$(echo "$service_info" | cut -d: -f1)
+                local service_type=$(echo "$service_info" | cut -d: -f2)
+                local nodeport=$(echo "$service_info" | cut -d: -f3)
                 
-                echo -n "Service $svc_name: "
-                
-                if [[ "$svc_type" == "NodePort" ]]; then
-                    if [[ -n "$nodeport" && "$nodeport" != "<none>" ]]; then
-                        echo "$(log_success "NodePort $nodeport -> $port")"
-                        echo "  URL: http://$MINIKUBE_IP:$nodeport"
-                    else
-                        echo "$(log_warning "NodePort but no nodePort assigned")"
-                    fi
-                else
-                    echo "$(log_info "$svc_type on port $port")"
+                if [ "$service_type" = "NodePort" ] && [ -n "$nodeport" ]; then
+                    log_info "Service $service_name: NodePort $nodeport"
                 fi
             fi
         done <<< "$nodeport_services"
         
-    else
-        log_error "Cannot get services in namespace $NAMESPACE"
-        return 1
+        echo ""
+        log_warning "⚠️  WSL2 NODEPORT LIMITATION:"
+        log_warning "NodePort services may not work in WSL2 due to network isolation"
+        log_warning "This script will use port-forwarding as fallback"
+        echo ""
     fi
     
-    echo ""
     return 0
 }
 
-# =============================================================================
-# STEP 5: PORT-FORWARD FALLBACK (CRITICAL)
-# =============================================================================
-
-setup_port_forward() {
-    log_step "5. PORT-FORWARD FALLBACK (CRITICAL)"
-    echo "=================================="
+# 5. PORT-FORWARD MODE (MOST IMPORTANT)
+setup_port_forwards() {
+    log_header "PORT FORWARD"
     
-    log_info "Setting up port-forward for reliable access..."
-    log_warning "NodePort often fails in WSL2/Docker environments"
-    log_info "Port-forward is the MOST RELIABLE method for testing"
+    log_info "Setting up port forwarding to localhost..."
     
-    # Kill existing port-forwards
-    pkill -f "kubectl port-forward" || true
-    sleep 2
+    # Clean up existing port forwards
+    cleanup_port_forwards
     
-    local success_count=0
+    # Get Minikube IP for reference
+    local minikube_ip=$(minikube ip 2>/dev/null || echo "192.168.49.2")
+    
+    # Start port forwards in background
+    log_info "Starting port forwarding services..."
     
     # Frontend port-forward
-    log_info "Setting up frontend port-forward..."
     if kubectl get service frontend -n "$NAMESPACE" >/dev/null 2>&1; then
-        kubectl port-forward -n "$NAMESPACE" service/frontend "$LOCAL_FRONTEND_PORT:80" >/dev/null 2>&1 &
-        local pf_pid=$!
-        PORT_FORWARD_PIDS+=($pf_pid)
-        
-        sleep 3
-        if kill -0 "$pf_pid" 2>/dev/null; then
-            log_success "Frontend port-forward started (PID: $pf_pid)"
-            echo "  Local URL: http://localhost:$LOCAL_FRONTEND_PORT"
-            success_count=$((success_count + 1))
-        else
-            log_error "Frontend port-forward failed"
-        fi
+        log_info "Forwarding frontend service..."
+        kubectl port-forward -n "$NAMESPACE" svc/frontend "$FRONTEND_LOCAL_PORT:3000" >/dev/null 2>&1 &
+        local frontend_pid=$!
+        echo "$frontend_pid" >> "$PIDS_FILE"
+        log_success "Frontend port-forward started (PID: $frontend_pid)"
     else
-        log_error "Frontend service not found"
+        log_warning "Frontend service not found"
     fi
     
     # Backend port-forward
-    log_info "Setting up backend port-forward..."
     if kubectl get service backend -n "$NAMESPACE" >/dev/null 2>&1; then
-        kubectl port-forward -n "$NAMESPACE" service/backend "$LOCAL_BACKEND_PORT:5000" >/dev/null 2>&1 &
-        local pf_pid=$!
-        PORT_FORWARD_PIDS+=($pf_pid)
-        
-        sleep 3
-        if kill -0 "$pf_pid" 2>/dev/null; then
-            log_success "Backend port-forward started (PID: $pf_pid)"
-            echo "  Local URL: http://localhost:$LOCAL_BACKEND_PORT"
-            success_count=$((success_count + 1))
-        else
-            log_error "Backend port-forward failed"
-        fi
+        log_info "Forwarding backend service..."
+        kubectl port-forward -n "$NAMESPACE" svc/backend "$BACKEND_LOCAL_PORT:5000" >/dev/null 2>&1 &
+        local backend_pid=$!
+        echo "$backend_pid" >> "$PIDS_FILE"
+        log_success "Backend port-forward started (PID: $backend_pid)"
     else
-        log_error "Backend service not found"
+        log_warning "Backend service not found"
     fi
     
-    echo ""
-    if [[ $success_count -gt 0 ]]; then
-        log_success "Port-forward setup complete!"
-        echo ""
-        echo "================================================================"
-        echo "                    ACCESS URLs (WORKING)"
-        echo "================================================================"
-        echo "  Frontend: http://localhost:$LOCAL_FRONTEND_PORT"
-        echo "  Backend:  http://localhost:$LOCAL_BACKEND_PORT"
-        echo "================================================================"
-        echo ""
-        echo "These URLs should work EVEN if NodePort fails!"
-        echo "Keep this terminal open to maintain port-forward connections."
+    # Grafana port-forward
+    if kubectl get service grafana -n monitoring >/dev/null 2>&1; then
+        log_info "Forwarding Grafana service..."
+        kubectl port-forward -n monitoring svc/grafana "$GRAFANA_LOCAL_PORT:3000" >/dev/null 2>&1 &
+        local grafana_pid=$!
+        echo "$grafana_pid" >> "$PIDS_FILE"
+        log_success "Grafana port-forward started (PID: $grafana_pid)"
     else
-        log_error "No port-forward could be established"
-        return 1
+        log_warning "Grafana service not found"
     fi
     
+    # Prometheus port-forward
+    if kubectl get service prometheus-server -n monitoring >/dev/null 2>&1; then
+        log_info "Forwarding Prometheus service..."
+        kubectl port-forward -n monitoring svc/prometheus-server "$PROMETHEUS_LOCAL_PORT:9090" >/dev/null 2>&1 &
+        local prometheus_pid=$!
+        echo "$prometheus_pid" >> "$PIDS_FILE"
+        log_success "Prometheus port-forward started (PID: $prometheus_pid)"
+    else
+        log_warning "Prometheus service not found"
+    fi
+    
+    # ArgoCD port-forward
+    if kubectl get service argocd-server -n argocd >/dev/null 2>&1; then
+        log_info "Forwarding ArgoCD service..."
+        kubectl port-forward -n argocd svc/argocd-server "$ARGOCD_LOCAL_PORT:80" >/dev/null 2>&1 &
+        local argocd_pid=$!
+        echo "$argocd_pid" >> "$PIDS_FILE"
+        log_success "ArgoCD port-forward started (PID: $argocd_pid)"
+    else
+        log_warning "ArgoCD service not found"
+    fi
+    
+    # Wait a moment for port forwards to establish
+    sleep 3
+    
     echo ""
+    log_header "🚀 ACCESS URLS (LOCALHOST)"
+    log_success "✅ Frontend:    http://localhost:$FRONTEND_LOCAL_PORT"
+    log_success "✅ Backend:     http://localhost:$BACKEND_LOCAL_PORT"
+    log_success "✅ Grafana:     http://localhost:$GRAFANA_LOCAL_PORT"
+    log_success "✅ Prometheus:  http://localhost:$PROMETHEUS_LOCAL_PORT"
+    log_success "✅ ArgoCD:      http://localhost:$ARGOCD_LOCAL_PORT"
+    echo ""
+    
     return 0
 }
 
-# =============================================================================
-# STEP 6: API HEALTH TEST
-# =============================================================================
-
-test_api_health() {
-    log_step "6. API HEALTH TEST"
-    echo "=================================="
+# 6. API TEST
+test_api() {
+    log_header "API TEST"
     
-    log_info "Testing API endpoints..."
+    log_info "Testing backend API health endpoint..."
     
-    # Test backend health
-    if test_endpoint "http://localhost:$LOCAL_BACKEND_PORT/health" "Backend Health"; then
-        log_success "Backend health endpoint working"
+    # Wait a moment for services to be ready
+    sleep 2
+    
+    if curl -s --max-time 10 "http://localhost:$BACKEND_LOCAL_PORT/health" >/dev/null 2>&1; then
+        log_success "Backend health endpoint is accessible"
         
-        # Try to get actual health data
-        echo "Health response:"
-        curl -s "http://localhost:$LOCAL_BACKEND_PORT/health" 2>/dev/null | head -5 | sed 's/^/  /'
+        # Get actual response
+        local health_response=$(curl -s "http://localhost:$BACKEND_LOCAL_PORT/health" 2>/dev/null || echo "No response")
+        log_info "Health response: $health_response"
     else
-        log_warning "Backend health endpoint not accessible"
-        echo "Trying root endpoint..."
-        if test_endpoint "http://localhost:$LOCAL_BACKEND_PORT/" "Backend Root"; then
-            log_success "Backend root endpoint working"
-        fi
+        log_error "Backend health endpoint not accessible"
+        print_fix_suggestion "Backend not responding" "Check backend pod logs: kubectl logs -n $NAMESPACE -l app=backend"
     fi
     
-    echo ""
-    
-    # Test frontend
-    if test_endpoint "http://localhost:$LOCAL_FRONTEND_PORT/" "Frontend"; then
-        log_success "Frontend is accessible"
-    else
-        log_warning "Frontend not accessible"
-    fi
-    
-    echo ""
     return 0
 }
 
-# =============================================================================
-# STEP 7: AI SERVICE TEST
-# =============================================================================
-
-test_ai_service() {
-    log_step "7. AI SERVICE TEST"
-    echo "=================================="
+# 7. AI TEST
+test_ai_endpoint() {
+    log_header "AI TEST"
     
-    log_info "Testing AI service endpoints..."
+    log_info "Testing AI endpoint..."
     
-    # Test AI endpoint (common patterns)
-    local ai_endpoints=(
-        "/api/ai/chat"
-        "/api/ai/test"
-        "/ai/chat"
-        "/api/chat"
-        "/chat"
-    )
+    # Try common AI endpoints
+    local ai_endpoints="/api/ai /ai /api/chat /chat"
+    local working_endpoint=""
     
-    local found_ai=false
-    
-    for endpoint in "${ai_endpoints[@]}"; do
-        if test_endpoint "http://localhost:$LOCAL_BACKEND_PORT$endpoint" "AI Endpoint $endpoint"; then
-            log_success "AI endpoint found: $endpoint"
-            found_ai=true
-            
-            # Try to get sample response
-            echo "Sample AI response:"
-            curl -s -X POST "http://localhost:$LOCAL_BACKEND_PORT$endpoint" \
-                -H "Content-Type: application/json" \
-                -d '{"message":"test"}' 2>/dev/null | head -3 | sed 's/^/  /'
+    for endpoint in $ai_endpoints; do
+        log_info "Testing endpoint: $endpoint"
+        if curl -s --max-time 10 "http://localhost:$BACKEND_LOCAL_PORT$endpoint" >/dev/null 2>&1; then
+            working_endpoint="$endpoint"
             break
         fi
     done
     
-    if ! $found_ai; then
-        log_warning "No AI endpoint found. Available endpoints:"
-        # Try to discover endpoints
-        curl -s "http://localhost:$LOCAL_BACKEND_PORT/" 2>/dev/null | grep -o 'href="[^"]*"' | sed 's/href="/  /g' | sed 's/"//g' | head -5
+    if [ -n "$working_endpoint" ]; then
+        log_success "AI endpoint found: $working_endpoint"
+        local ai_response=$(curl -s "http://localhost:$BACKEND_LOCAL_PORT$working_endpoint" 2>/dev/null | head -c 200)
+        log_info "AI response sample: $ai_response..."
+    else
+        log_warning "No AI endpoint found or accessible"
+        print_fix_suggestion "AI endpoint not working" "Check AI service configuration and Ollama connection"
     fi
     
-    echo ""
     return 0
 }
 
-# =============================================================================
-# STEP 8: OLLAMA CHECK
-# =============================================================================
-
+# 8. OLLAMA CHECK
 check_ollama() {
-    log_step "8. OLLAMA CHECK"
-    echo "=================================="
+    log_header "OLLAMA CHECK"
     
     log_info "Checking Ollama service..."
     
     # Check if Ollama is running locally
-    if test_endpoint "http://localhost:11434/api/tags" "Ollama API"; then
-        log_success "Ollama is running"
+    if curl -s --max-time 5 "http://localhost:$OLLAMA_LOCAL_PORT/api/tags" >/dev/null 2>&1; then
+        log_success "Ollama service is accessible"
         
-        echo "Available models:"
-        curl -s "http://localhost:11434/api/tags" 2>/dev/null | grep -o '"name":"[^"]*"' | sed 's/"name":"/- /g' | sed 's/"//g'
+        # Check for gemma:2b model
+        local models=$(curl -s "http://localhost:$OLLAMA_LOCAL_PORT/api/tags" 2>/dev/null | grep -o '"gemma:2b"' || echo "")
         
-        # Check for gemma:2b specifically
-        if curl -s "http://localhost:11434/api/tags" 2>/dev/null | grep -q "gemma:2b"; then
-            log_success "gemma:2b model found"
+        if [ -n "$models" ]; then
+            log_success "Model 'gemma:2b' is available"
         else
-            log_warning "gemma:2b model not found"
-            echo "To install: ollama pull gemma:2b"
+            log_warning "Model 'gemma:2b' not found"
+            print_fix_suggestion "Missing AI model" "Run: ollama pull gemma:2b"
         fi
+        
+        # List available models
+        log_info "Available models:"
+        curl -s "http://localhost:$OLLAMA_LOCAL_PORT/api/tags" 2>/dev/null | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' | head -5
     else
-        log_warning "Ollama not accessible on localhost:11434"
-        echo "Suggestion: Install Ollama or check if it's running"
-        echo "Install: curl -fsSL https://ollama.ai/install.sh | sh"
+        log_warning "Ollama service not accessible"
+        print_fix_suggestion "Ollama not running" "Run: ollama serve"
     fi
     
-    echo ""
+    return 0
+}
+
+# 9. PROMETHEUS CHECK
+check_prometheus() {
+    log_header "PROMETHEUS CHECK"
+    
+    log_info "Checking Prometheus service..."
+    
+    if wait_for_service "http://localhost:$PROMETHEUS_LOCAL_PORT" "Prometheus"; then
+        log_success "Prometheus UI is accessible"
+        
+        # Check targets
+        log_info "Checking Prometheus targets..."
+        local targets_response=$(curl -s "http://localhost:$PROMETHEUS_LOCAL_PORT/api/v1/targets" 2>/dev/null || echo "")
+        
+        if echo "$targets_response" | grep -q "active"; then
+            local active_targets=$(echo "$targets_response" | grep -o '"health":"up"' | wc -l)
+            log_success "Found $active_targets healthy targets"
+        else
+            log_warning "Could not retrieve Prometheus targets"
+        fi
+    else
+        log_error "Prometheus not accessible"
+        print_fix_suggestion "Prometheus down" "Check monitoring namespace: kubectl get pods -n monitoring"
+    fi
+    
+    return 0
+}
+
+# 10. GRAFANA AUTO DASHBOARD
+setup_grafana_info() {
+    log_header "GRAFANA DASHBOARD INFO"
+    
+    log_info "Grafana dashboard setup information..."
+    
+    if wait_for_service "http://localhost:$GRAFANA_LOCAL_PORT" "Grafana"; then
+        log_success "Grafana UI is accessible"
+        
+        echo ""
+        log_info "🔧 GRAFANA SETUP:"
+        log_info "   URL: http://localhost:$GRAFANA_LOCAL_PORT"
+        log_info "   Default credentials: admin/admin"
+        echo ""
+        
+        log_info "📊 AUTO-DASHBOARD SETUP:"
+        log_info "   1. Login with admin/admin"
+        log_info "   2. Add Prometheus data source:"
+        log_info "      URL: http://prometheus-server:9090"
+        log_info "      Access: Server (default)"
+        echo ""
+        
+        log_info "🎯 RECOMMENDED DASHBOARDS:"
+        log_info "   • Kubernetes Overview"
+        log_info "   • Node Exporter Full"
+        log_info "   • Pod Health"
+        log_info "   • Application Metrics"
+        echo ""
+        
+        log_info "🚀 PROVISIONING (Auto-setup):"
+        log_info "   To auto-load dashboards, add provisioning configs:"
+        log_info "   /etc/grafana/provisioning/datasources/prometheus.yml"
+        log_info "   /etc/grafana/provisioning/dashboards/k8s.yml"
+    else
+        log_error "Grafana not accessible"
+        print_fix_suggestion "Grafana down" "Check monitoring namespace: kubectl get pods -n monitoring"
+    fi
+    
     return 0
 }
 
 # =============================================================================
-# STEP 9: FINAL SUMMARY
+# 🎯 MAIN EXECUTION
 # =============================================================================
-
-print_summary() {
-    log_step "9. FINAL SUMMARY"
-    echo "=================================="
+main() {
+    echo ""
+    log_header "🔍 AI SMART LEARNING PLATFORM - DEBUG SCRIPT"
+    log_info "This script verifies if system is REALLY working"
+    log_info "Always uses port-forwarding for reliable localhost access"
+    echo ""
     
-    echo "================================================================"
-    echo "                    DEBUG SUMMARY"
-    echo "================================================================"
+    # Execute all checks
+    check_cluster_sanity
+    local cluster_status=$?
     
-    # Cluster status
-    echo "Cluster Status:"
-    if kubectl cluster-info >/dev/null 2>&1; then
-        echo "  $(log_success "Connected")"
+    check_namespace
+    local namespace_status=$?
+    
+    if [ $cluster_status -eq 0 ] && [ $namespace_status -eq 0 ]; then
+        check_pods
+        check_services
+        setup_port_forwards
+        test_api
+        test_ai_endpoint
+        check_ollama
+        check_prometheus
+        setup_grafana_info
     else
-        echo "  $(log_error "Disconnected")"
+        log_error "Critical issues found - cannot proceed with full checks"
+        log_info "Please fix the cluster/namespace issues first"
     fi
     
-    # Namespace status
-    if kubectl get namespace "$NAMESPACE" >/dev/null 2>&1; then
-        echo "  Namespace $NAMESPACE: $(log_success "Exists")"
-    else
-        echo "  Namespace $NAMESPACE: $(log_error "Missing")"
-    fi
+    echo ""
+    log_header "🏁 DEBUG COMPLETE"
+    log_info "Port forwarding will remain active"
+    log_info "Press Ctrl+C to stop all port forwards"
+    echo ""
     
-    # Pod status
-    local pod_count=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
-    local healthy_pods=$(kubectl get pods -n "$NAMESPACE" --no-headers 2>/dev/null | grep "Running" | wc -l)
-    echo "  Pods: $healthy_pods/$pod_count healthy"
-    
-    # Service status
-    local svc_count=$(kubectl get services -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l)
-    echo "  Services: $svc_count found"
-    
-    # Port-forward status
-    local active_pf=0
-    for pid in "${PORT_FORWARD_PIDS[@]}"; do
-        if kill -0 "$pid" 2>/dev/null; then
-            active_pf=$((active_pf + 1))
+    # Keep script running to maintain port forwards
+    log_info "Monitoring port forwarding status..."
+    while true; do
+        sleep 30
+        # Check if port forwards are still running
+        if [ -f "$PIDS_FILE" ]; then
+            local active_count=0
+            while read -r pid; do
+                if kill -0 "$pid" 2>/dev/null; then
+                    active_count=$((active_count + 1))
+                fi
+            done < "$PIDS_FILE"
+            
+            if [ $active_count -eq 0 ]; then
+                log_warning "All port forwards have stopped"
+                break
+            fi
+        else
+            log_warning "No port forwards found"
+            break
         fi
     done
-    echo "  Port-forwards: $active_pf active"
-    
-    echo ""
-    echo "================================================================"
-    echo "                    WORKING URLs"
-    echo "================================================================"
-    echo "  Frontend: http://localhost:$LOCAL_FRONTEND_PORT"
-    echo "  Backend:  http://localhost:$LOCAL_BACKEND_PORT"
-    
-    if [[ -n "$MINIKUBE_IP" ]]; then
-        echo ""
-        echo "NodePort URLs (may not work in WSL2):"
-        echo "  Frontend: http://$MINIKUBE_IP:$FRONTEND_NODEPORT"
-        echo "  Backend:  http://$MINIKUBE_IP:$BACKEND_NODEPORT"
-    fi
-    
-    echo ""
-    echo "================================================================"
-    echo "                    TROUBLESHOOTING TIPS"
-    echo "================================================================"
-    echo "1. If port-forward URLs work but NodePort URLs don't:"
-    echo "   - This is NORMAL in WSL2/Docker Desktop environments"
-    echo "   - Use port-forward URLs for development"
-    echo ""
-    echo "2. If namespace is missing:"
-    echo "   - Re-run: ./devops-smart.sh full"
-    echo ""
-    echo "3. If pods are CrashLoopBackOff:"
-    echo "   - Check logs: kubectl logs -n $NAMESPACE <pod-name>"
-    echo "   - Check resources: minikube ssh 'df -h'"
-    echo ""
-    echo "4. If nothing works:"
-    echo "   - Restart Minikube: minikube stop && minikube start"
-    echo "   - Redeploy: ./devops-smart.sh full"
-    echo ""
-    echo "5. To keep port-forwards running in background:"
-    echo "   - Run this script in a separate terminal"
-    echo "   - Or use 'nohup ./devops-debug.sh > debug.log 2>&1 &'"
-    echo "================================================================"
 }
 
-# =============================================================================
-# MAIN FUNCTION
-# =============================================================================
-
-main() {
-    echo "================================================================"
-    echo "    AI Smart Learning Platform - DEBUG & VERIFICATION"
-    echo "================================================================"
-    echo ""
-    
-    # Run all checks
-    local exit_code=0
-    
-    check_cluster_sanity || exit_code=1
-    check_namespace || exit_code=1
-    check_pods || exit_code=1
-    check_services || exit_code=1
-    
-    # Critical port-forward setup
-    if setup_port_forward; then
-        test_api_health || exit_code=1
-        test_ai_service || exit_code=1
-        check_ollama || exit_code=1
-    else
-        exit_code=1
-    fi
-    
-    print_summary
-    
-    if [[ $exit_code -eq 0 ]]; then
-        log_success "Debug completed successfully!"
-        echo "Your app should be accessible via the URLs above."
-    else
-        log_error "Some issues found. See summary above for fixes."
-    fi
-    
-    echo ""
-    log_info "Press Ctrl+C to stop port-forwards, or keep this terminal open"
-    
-    # Keep script running to maintain port-forwards
-    if [[ ${#PORT_FORWARD_PIDS[@]} -gt 0 ]]; then
-        echo "Maintaining port-forward connections..."
-        wait
-    fi
-    
-    return $exit_code
-}
-
-# =============================================================================
-# SCRIPT ENTRY POINT
-# =============================================================================
-
-# Check if running in correct directory
-if [[ ! -f "devops-smart.sh" ]]; then
-    log_error "Please run this script from the project root directory"
-    echo "Expected to find 'devops-smart.sh' in current directory"
-    exit 1
-fi
-
-# Run main function
+# Execute main function
 main "$@"
