@@ -248,15 +248,15 @@ setup_port_forwarding() {
     BACKEND_PID=$!
     
     log_info "Starting port forwarding for Grafana..."
-    kubectl port-forward -n monitoring svc/grafana-nodeport 3001:3000 &
+    kubectl port-forward -n monitoring svc/grafana 3002:3000 &
     GRAFANA_PID=$!
     
     log_info "Starting port forwarding for Prometheus..."
-    kubectl port-forward -n monitoring svc/prometheus-nodeport 3002:9090 &
+    kubectl port-forward -n monitoring svc/prometheus 9092:9090 &
     PROMETHEUS_PID=$!
     
     log_info "Starting port forwarding for ArgoCD..."
-    kubectl port-forward -n argocd svc/argocd-server-nodeport 3003:8080 &
+    kubectl port-forward -n argocd svc/argocd-server 18081:8080 &
     ARGOCD_PID=$!
     
     # Wait a moment for port forwarding to establish
@@ -366,9 +366,9 @@ show_access_info() {
     echo "  AI Chat:   http://localhost:3000/ai-chat"
     echo ""
     echo "📊 MONITORING & DEVOPS:"
-    echo "  Grafana:    http://localhost:3001 (admin/admin)"
-    echo "  Prometheus: http://localhost:3002"
-    echo "  ArgoCD:     http://localhost:3003 (admin/admin123)"
+    echo "  Grafana:    http://localhost:3002 (admin/admin)"
+    echo "  Prometheus: http://localhost:9092"
+    echo "  ArgoCD:     http://localhost:18081 (admin/admin123)"
     echo ""
     echo "🤖 AI SERVICES:"
     echo "  Ollama:    http://localhost:11434"
