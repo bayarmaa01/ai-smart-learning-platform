@@ -20,6 +20,9 @@ const { resolveTenant } = require('./middleware/tenantMiddleware');
 const { logger } = require('./utils/logger');
 const routes = require('./routes');
 const aiRoutes = require('./routes/ai.routes');
+const chatRoutes = require('./routes/chat');
+const placementTestRoutes = require('./routes/placementTest');
+const certificateRoutes = require('./routes/certificates');
 
 const app = express();
 const server = http.createServer(app);
@@ -97,6 +100,9 @@ app.get('/api/v1/health', (req, res) => {
 app.use(resolveTenant);
 app.use('/api/v1', routes);
 app.use('/api/v1/ai', aiRoutes);
+app.use('/api', chatRoutes);
+app.use('/api/v1/placement-tests', placementTestRoutes);
+app.use('/api/v1/certificates', certificateRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

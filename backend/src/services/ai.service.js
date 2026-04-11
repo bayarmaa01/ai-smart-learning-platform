@@ -4,9 +4,9 @@ const { getCache, setCache } = require('../cache/redis');
 
 class AIService {
   constructor() {
-    this.ollamaUrl = process.env.OLLAMA_URL || 'http://host.minikube.internal:11434';
-    this.model = process.env.OLLAMA_MODEL || 'gemma:2b';
-    this.timeout = 10000; // 10 seconds
+    this.ollamaUrl = process.env.OLLAMA_URL || 'http://host.docker.internal:11434';
+    this.model = process.env.OLLAMA_MODEL || 'gemma4:31b';
+    this.timeout = 30000; // 30 seconds for larger model
     this.maxRetries = 3;
   }
 
@@ -102,7 +102,7 @@ class AIService {
       });
       
       const hasGemma = response.data.models.some(model => 
-        model.name.includes('gemma') && model.name.includes('2b')
+        model.name.includes('gemma4') && model.name.includes('31b')
       );
       
       return {
