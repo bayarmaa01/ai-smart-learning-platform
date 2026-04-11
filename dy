@@ -1,0 +1,28 @@
+HTTP/1.1 400 Bad Request
+Content-Security-Policy: default-src 'self';style-src 'self' 'unsafe-inline';script-src 'self';img-src 'self' data: https:;base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';object-src 'none';script-src-attr 'none';upgrade-insecure-requests
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Origin-Agent-Cluster: ?1
+Referrer-Policy: no-referrer
+Strict-Transport-Security: max-age=15552000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-DNS-Prefetch-Control: off
+X-Download-Options: noopen
+X-Frame-Options: SAMEORIGIN
+X-Permitted-Cross-Domain-Policies: none
+X-XSS-Protection: 0
+Vary: Origin, Accept-Encoding
+Access-Control-Allow-Credentials: true
+RateLimit-Policy: 20;w=900
+RateLimit-Limit: 20
+RateLimit-Remaining: 19
+RateLimit-Reset: 900
+X-Request-ID: 661ddccb-9d09-4cd8-a23c-260e9e5858ce
+Content-Type: application/json; charset=utf-8
+Content-Length: 134
+ETag: W/"86-qJYyy5jRW/jReOau7mTJCN0b2CE"
+Date: Wed, 08 Apr 2026 04:31:09 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+
+{"success":false,"error":{"code":"VALIDATION_ERROR","message":"Validation failed"},"requestId":"661ddccb-9d09-4cd8-a23c-260e9e5858ce"}
