@@ -240,23 +240,23 @@ setup_port_forwarding() {
     
     # Start port forwarding in background
     log_info "Starting port forwarding for frontend..."
-    kubectl port-forward -n "$NAMESPACE" svc/frontend-nodeport 3000:3000 &
+    kubectl port-forward -n "$NAMESPACE" svc/frontend-nodeport 3200:3000 &
     FRONTEND_PID=$!
     
     log_info "Starting port forwarding for backend..."
-    kubectl port-forward -n "$NAMESPACE" svc/backend-nodeport 5000:5000 &
+    kubectl port-forward -n "$NAMESPACE" svc/backend-nodeport 4200:5000 &
     BACKEND_PID=$!
     
     log_info "Starting port forwarding for Grafana..."
-    kubectl port-forward -n monitoring svc/grafana 3002:3000 &
+    kubectl port-forward -n monitoring svc/grafana 5200:3000 &
     GRAFANA_PID=$!
     
     log_info "Starting port forwarding for Prometheus..."
-    kubectl port-forward -n monitoring svc/prometheus 9092:9090 &
+    kubectl port-forward -n monitoring svc/prometheus 9093:9090 &
     PROMETHEUS_PID=$!
     
     log_info "Starting port forwarding for ArgoCD..."
-    kubectl port-forward -n argocd svc/argocd-server 18081:8080 &
+    kubectl port-forward -n argocd svc/argocd-server 18080:8080 &
     ARGOCD_PID=$!
     
     # Wait a moment for port forwarding to establish
@@ -361,14 +361,14 @@ show_access_info() {
     echo "======================================"
     echo ""
     echo "📱 LOCAL ACCESS:"
-    echo "  Frontend:  http://localhost:3000"
-    echo "  Backend:   http://localhost:5000"
-    echo "  AI Chat:   http://localhost:3000/ai-chat"
+    echo "  Frontend:  http://localhost:3200"
+    echo "  Backend:   http://localhost:4200"
+    echo "  AI Chat:   http://localhost:3200/ai-chat"
     echo ""
     echo "📊 MONITORING & DEVOPS:"
-    echo "  Grafana:    http://localhost:3002 (admin/admin)"
-    echo "  Prometheus: http://localhost:9092"
-    echo "  ArgoCD:     http://localhost:18081 (admin/admin123)"
+    echo "  Grafana:    http://localhost:5200 (admin/admin)"
+    echo "  Prometheus: http://localhost:9093"
+    echo "  ArgoCD:     http://localhost:18080 (admin/admin123)"
     echo ""
     echo "🤖 AI SERVICES:"
     echo "  Ollama:    http://localhost:11434"
