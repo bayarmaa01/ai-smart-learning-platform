@@ -146,5 +146,5 @@ spec:
   ports:
     - port: 5000
       targetPort: 5000
-      nodePort: 4200
+      nodePort: 30420
   type: NodePort

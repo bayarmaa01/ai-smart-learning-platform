@@ -319,7 +319,7 @@ spec:
   ports:
     - port: 9090
       targetPort: 9090
-      nodePort: 9093
+      nodePort: 30930
 
 ---
 # Grafana ConfigMap
@@ -578,7 +578,7 @@ spec:
   ports:
     - port: 3000
       targetPort: 3000
-      nodePort: 5200
+      nodePort: 30520
 
 ---
 # Node Exporter DaemonSet
