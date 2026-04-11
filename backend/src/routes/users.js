@@ -65,7 +65,7 @@ router.get('/stats', verifyToken, async (req, res) => {
   const [enrollRes, certRes, hoursRes, streakRes] = await Promise.all([
     query('SELECT COUNT(*) as total, COUNT(completed_at) as completed FROM enrollments WHERE user_id = $1', [req.user.id]),
     query('SELECT COUNT(*) as total FROM enrollments WHERE user_id = $1 AND completed_at IS NOT NULL', [req.user.id]),
-    query(`SELECT COALESCE(SUM(lp.watched_seconds), 0) / 3600.0 AS total_hours
+    query(`SELECT COALESCE(SUM(lp.watch_time_seconds), 0) / 3600.0 AS total_hours
            FROM lesson_progress lp
            JOIN lessons l ON lp.lesson_id = l.id
            WHERE lp.user_id = $1`, [req.user.id]),
@@ -100,7 +100,7 @@ router.get('/stats', verifyToken, async (req, res) => {
 router.get('/activity/weekly', verifyToken, async (req, res) => {
   const result = await query(
     `SELECT TO_CHAR(DATE(created_at), 'Dy') AS day,
-            COALESCE(SUM(watched_seconds), 0) / 3600.0 AS hours
+            COALESCE(SUM(watch_time_seconds), 0) / 3600.0 AS hours
      FROM lesson_progress
      WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
      GROUP BY DATE(created_at), TO_CHAR(DATE(created_at), 'Dy')
@@ -130,7 +130,7 @@ router.get('/progress', verifyToken, async (req, res) => {
     ),
     query(
       `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') AS month,
-              COALESCE(SUM(watched_seconds), 0) / 3600.0 AS hours
+              COALESCE(SUM(watch_time_seconds), 0) / 3600.0 AS hours
        FROM lesson_progress
        WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '6 months'
        GROUP BY DATE_TRUNC('month', created_at)
@@ -141,7 +141,7 @@ router.get('/progress', verifyToken, async (req, res) => {
 
   const completed = enrollRes.rows.filter((e) => e.completed_at).length;
   const totalHoursRes = await query(
-    `SELECT COALESCE(SUM(watched_seconds), 0) / 3600.0 AS total FROM lesson_progress WHERE user_id = $1`,
+    `SELECT COALESCE(SUM(watch_time_seconds), 0) / 3600.0 AS total FROM lesson_progress WHERE user_id = $1`,
     [req.user.id]
   );
 

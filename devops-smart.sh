@@ -35,7 +35,7 @@ log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step() { echo -e "${PURPLE}[STEP]${NC} $1"; }
 
-# Parse arguments
+# Parse arguments. 
 MODE="full"
 RESET_CLUSTER=false
 SHOW_STATUS=false

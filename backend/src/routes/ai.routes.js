@@ -32,6 +32,12 @@ router.post('/quiz', AIController.quiz);
 router.post('/explain', AIController.explain);
 
 /**
+ * POST /ai/chat
+ * AI Chat - General chat interface
+ */
+router.post('/chat', AIController.chat);
+
+/**
  * POST /ai/debug
  * AI Error Helper - Debug DevOps issues
  */
