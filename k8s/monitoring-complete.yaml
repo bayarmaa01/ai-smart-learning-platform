@@ -1,0 +1,761 @@
+---
+# Complete Monitoring Stack for AI Smart Learning Platform
+# Includes Prometheus, Grafana, AlertManager, Node Exporter
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    name: monitoring
+---
+# Prometheus ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    rule_files:
+      - "/etc/prometheus/rules/*.yml"
+    
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+              - alertmanager:9093
+    
+    scrape_configs:
+      # Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+      
+      # Kubernetes API
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+      
+      # Node Exporter
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+      
+      # Kubelet
+      - job_name: 'kubelet'
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+      
+      # Application Services
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:9102
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            target_label: __address__
+            regex: ([^:]+)(?::\d+)?
+            replacement: $1:2
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+      
+      # EduAI Application Services
+      - job_name: 'eduai-services'
+        kubernetes_sd_configs:
+          - role: endpoints
+          - namespaces:
+              names: [eduai]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_service_name]
+            action: replace
+            target_label: kubernetes_name
+
+  alert_rules.yml: |
+    groups:
+      - name: eduai.rules
+        rules:
+          # Backend alerts
+          - alert: BackendDown
+            expr: up{job="eduai-services",kubernetes_name="backend"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Backend service is down"
+              description: "Backend service has been down for more than 1 minute"
+          
+          - alert: BackendHighErrorRate
+            expr: rate(http_requests_total{job="eduai-services",kubernetes_name="backend",status=~"5.."}[5m]) > 0.1
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Backend high error rate"
+              description: "Backend error rate is {{ $value }} errors per second"
+          
+          - alert: BackendHighMemoryUsage
+            expr: container_memory_usage_bytes{pod=~"backend-.*"} / container_spec_memory_limit_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Backend high memory usage"
+              description: "Backend memory usage is above 90%"
+          
+          # Frontend alerts
+          - alert: FrontendDown
+            expr: up{job="eduai-services",kubernetes_name="frontend"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Frontend service is down"
+              description: "Frontend service has been down for more than 1 minute"
+          
+          # Database alerts
+          - alert: PostgreSQLDown
+            expr: up{job="eduai-services",kubernetes_name="postgres"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "PostgreSQL is down"
+              description: "PostgreSQL database has been down for more than 1 minute"
+          
+          - alert: PostgreSQLHighConnections
+            expr: pg_stat_database_numbackends{datname="eduai"} > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "PostgreSQL high connection count"
+              description: "PostgreSQL has {{ $value }} active connections"
+          
+          # Redis alerts
+          - alert: RedisDown
+            expr: up{job="eduai-services",kubernetes_name="redis"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Redis is down"
+              description: "Redis cache has been down for more than 1 minute"
+          
+          # Pod alerts
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod is crash looping"
+              description: "Pod {{ $labels.kubernetes_pod_name }} is restarting frequently"
+          
+          - alert: PodNotReady
+            expr: kube_pod_status_ready{condition="true"} == 0
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod is not ready"
+              description: "Pod {{ $labels.kubernetes_pod_name }} has been not ready for more than 10 minutes"
+
+---
+# Prometheus Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: prometheus
+      containers:
+      - name: prometheus
+        image: prom/prometheus:latest
+        args:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+          - '--storage.tsdb.path=/prometheus/'
+          - '--web.console.libraries=/etc/prometheus/console_libraries'
+          - '--web.console.templates=/etc/prometheus/consoles'
+          - '--storage.tsdb.retention.time=200h'
+          - '--web.enable-lifecycle'
+          - '--web.enable-admin-api'
+        ports:
+        - containerPort: 9090
+          name: http
+        volumeMounts:
+        - name: prometheus-config-volume
+          mountPath: /etc/prometheus/
+        - name: prometheus-storage-volume
+          mountPath: /prometheus/
+        resources:
+          requests:
+            cpu: 200m
+            memory: 1000Mi
+          limits:
+            cpu: 1000m
+            memory: 2000Mi
+      volumes:
+      - name: prometheus-config-volume
+        configMap:
+          defaultMode: 420
+          name: prometheus-config
+      - name: prometheus-storage-volume
+        emptyDir: {}
+
+---
+# Prometheus Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+  labels:
+    app: prometheus
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+spec:
+  selector:
+    app: prometheus
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      name: http
+
+---
+# Prometheus NodePort Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-nodeport
+  namespace: monitoring
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  type: NodePort
+  ports:
+    - port: 9090
+      targetPort: 9090
+      nodePort: 30090
+
+---
+# Grafana ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-config
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  grafana.ini: |
+    [server]
+    http_port = 3000
+    domain = ""
+    root_url = %(protocol)s://%(domain)s:%(http_port)s/
+    
+    [database]
+    type = sqlite3
+    path = /var/lib/grafana/grafana.db
+    
+    [security]
+    admin_user = admin
+    admin_password = admin
+    
+    [users]
+    allow_sign_up = false
+    
+    [auth.anonymous]
+    enabled = false
+    
+    [snapshots]
+    external_enabled = false
+    
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/default.json
+
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: true
+        jsonData:
+          timeInterval: "5s"
+          queryTimeout: "60s"
+          httpMethod: "POST"
+
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  eduai-overview.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "EduAI Platform Overview",
+        "tags": ["eduai", "overview"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Service Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=\"eduai-services\"}",
+                "legendFormat": "{{kubernetes_name}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "mappings": [
+                  {"options": {"0": {"text": "DOWN", "color": "red"}}, "type": "value"},
+                  {"options": {"1": {"text": "UP", "color": "green"}}, "type": "value"}
+                ]
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Request Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job=\"eduai-services\"}[5m])",
+                "legendFormat": "{{kubernetes_name}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "container_memory_usage_bytes{pod=~\"backend-.*|frontend-.*\"} / 1024 / 1024",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "CPU Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{pod=~\"backend-.*|frontend-.*\"}[5m]) * 100",
+                "legendFormat": "{{pod}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+          }
+        ],
+        "time": {"from": "now-1h", "to": "now"},
+        "refresh": "5s"
+      }
+    }
+
+---
+# Grafana Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      serviceAccountName: grafana
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+          name: http
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          value: "admin"
+        - name: GF_INSTALL_PLUGINS
+          value: "grafana-clock-panel,grafana-simple-json-datasource"
+        volumeMounts:
+        - name: grafana-config-volume
+          mountPath: /etc/grafana/grafana.ini
+          subPath: grafana.ini
+        - name: grafana-config-volume
+          mountPath: /etc/grafana/provisioning/datasources/datasources.yml
+          subPath: datasources.yml
+        - name: grafana-config-volume
+          mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+          subPath: dashboards.yml
+        - name: grafana-dashboards-volume
+          mountPath: /var/lib/grafana/dashboards/
+        - name: grafana-storage-volume
+          mountPath: /var/lib/grafana/
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 3000
+          initialDelaySeconds: 60
+          periodSeconds: 20
+      volumes:
+      - name: grafana-config-volume
+        configMap:
+          defaultMode: 420
+          name: grafana-config
+      - name: grafana-dashboards-volume
+        configMap:
+          defaultMode: 420
+          name: grafana-dashboards
+      - name: grafana-storage-volume
+        emptyDir: {}
+
+---
+# Grafana Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+
+---
+# Grafana NodePort Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-nodeport
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  type: NodePort
+  ports:
+    - port: 3000
+      targetPort: 3000
+      nodePort: 30030
+
+---
+# Node Exporter DaemonSet
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    app: node-exporter
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+    spec:
+      hostPID: true
+      hostNetwork: true
+      containers:
+      - name: node-exporter
+        image: prom/node-exporter:latest
+        args:
+          - --path.procfs=/host/proc
+          - --path.rootfs=/host/rootfs
+          - --path.sysfs=/host/sys
+          - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+        ports:
+        - containerPort: 9100
+          name: http
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+        - name: sys
+          mountPath: /host/sys
+        - name: root
+          mountPath: /host/rootfs
+          readOnly: true
+        resources:
+          requests:
+            cpu: 50m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+      - name: root
+        hostPath:
+          path: /
+
+---
+# Node Exporter Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: monitoring
+  labels:
+    app: node-exporter
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9100"
+spec:
+  selector:
+    app: node-exporter
+  type: ClusterIP
+  ports:
+    - port: 9100
+      targetPort: 9100
+      name: http
+
+---
+# AlertManager ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'localhost:587'
+      smtp_from: 'alerts@eduai.com'
+      smtp_auth_username: 'alerts@eduai.com'
+      smtp_auth_password: 'password'
+    
+    route:
+      group_by: ['alertname']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'web.hook'
+    
+    receivers:
+      - name: 'web.hook'
+        email_configs:
+          - to: 'admin@eduai.com'
+            subject: '[EduAI Alert] {{ .GroupLabels.alertname }}'
+            body: |
+              {{ range .Alerts }}
+              Alert: {{ .Annotations.summary }}
+              Description: {{ .Annotations.description }}
+              {{ end }}
+
+---
+# AlertManager Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:latest
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+        ports:
+        - containerPort: 9093
+          name: http
+        volumeMounts:
+        - name: alertmanager-config-volume
+          mountPath: /etc/alertmanager/
+        - name: alertmanager-storage-volume
+          mountPath: /alertmanager/
+        resources:
+          requests:
+            cpu: 50m
+            memory: 50Mi
+          limits:
+            cpu: 100m
+            memory: 100Mi
+      volumes:
+      - name: alertmanager-config-volume
+        configMap:
+          defaultMode: 420
+          name: alertmanager-config
+      - name: alertmanager-storage-volume
+        emptyDir: {}
+
+---
+# AlertManager Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+  labels:
+    app: alertmanager
+spec:
+  selector:
+    app: alertmanager
+  type: ClusterIP
+  ports:
+    - port: 9093
+      targetPort: 9093
+      name: http

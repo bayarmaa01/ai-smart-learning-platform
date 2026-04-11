@@ -5,10 +5,10 @@ export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
   async ({ message, sessionId }, { rejectWithValue }) => {
     try {
-      const response = await api.post('/ai/chat', { message, session_id: sessionId });
+      const response = await api.post('/chat', { message });
       return response.data;
     } catch (err) {
-      return rejectWithValue(err.response?.data?.detail || 'AI service unavailable');
+      return rejectWithValue(err.response?.data?.error || 'AI service unavailable');
     }
   }
 );
@@ -63,17 +63,15 @@ const chatSlice = createSlice({
       })
       .addCase(sendMessage.fulfilled, (state, action) => {
         state.isTyping = false;
-        state.messages.push({
-          id: action.payload.message_id || Date.now().toString(),
-          role: 'assistant',
-          content: action.payload.response,
-          timestamp: new Date().toISOString(),
-          detectedLanguage: action.payload.detected_language,
-          sources: action.payload.sources || [],
-        });
-        state.detectedLanguage = action.payload.detected_language || 'en';
-        if (action.payload.session_id) {
-          state.sessionId = action.payload.session_id;
+        if (action.payload.success && action.payload.data) {
+          state.messages.push({
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: action.payload.data.response,
+            timestamp: new Date().toISOString(),
+            detectedLanguage: 'en',
+            sources: [],
+          });
         }
       })
       .addCase(sendMessage.rejected, (state, action) => {
