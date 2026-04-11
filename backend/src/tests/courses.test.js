@@ -4,12 +4,12 @@ const { query } = require('../db/connection');
 const redisClient = require('../cache/redis');
 
 // Import authMiddleware with explicit path and fallback
-let authMiddleware;
+let _authMiddleware;
 try {
-  authMiddleware = require('../middleware/auth').authMiddleware;
+  _authMiddleware = require('../middleware/auth').authMiddleware;
 } catch (error) {
   console.warn('Warning: Could not import authMiddleware:', error.message);
-  authMiddleware = async (req, res, next) => next();
+  _authMiddleware = async (req, res, next) => next();
 }
 const jwt = require('jsonwebtoken');
 
@@ -25,7 +25,7 @@ const makeToken = (role = 'student') =>
 
 // Helper function to mock tenant queries
 const mockTenantQuery = (mockQuery) => {
-  return mockQuery.mockImplementation((queryText, params) => {
+  return mockQuery.mockImplementation((queryText, _params) => {
     if (queryText.includes('SELECT id, name, slug, settings, subscription_plan, max_users, is_active FROM tenants WHERE id')) {
       return Promise.resolve({
         rows: [{

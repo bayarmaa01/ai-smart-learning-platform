@@ -253,6 +253,61 @@ Format as JSON:
   }
 
   /**
+   * AI Chat - General chat interface
+   */
+  static async chat(req, res) {
+    try {
+      const { message } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({
+          success: false,
+          error: 'Message is required'
+        });
+      }
+
+      const prompt = `You are a helpful AI learning assistant. Respond to this user message in a friendly, educational way: "${message}"
+
+Provide a helpful, concise response that:
+1. Directly answers their question
+2. Is educational and supportive
+3. Keeps it conversational and friendly
+4. Is appropriate for a learning platform
+
+Format your response as JSON:
+{
+  "response": "your helpful response",
+  "type": "answer|explanation|guidance"
+}`;
+
+      const response = await aiService.generate(prompt);
+      
+      let result;
+      try {
+        result = JSON.parse(response);
+      } catch (e) {
+        result = {
+          response: response,
+          type: 'answer'
+        };
+      }
+
+      res.json({
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      logger.error('AI Chat Error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to process chat message',
+        fallback: 'I apologize, but I\'m having trouble processing your message right now. Please try again.'
+      });
+    }
+  }
+
+  /**
    * AI Health Check
    */
   static async health(req, res) {
