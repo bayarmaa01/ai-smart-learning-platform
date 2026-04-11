@@ -438,14 +438,14 @@ check_ollama() {
     if curl -s --max-time 5 "http://localhost:$OLLAMA_LOCAL_PORT/api/tags" >/dev/null 2>&1; then
         log_success "Ollama service is accessible"
         
-        # Check for gemma:2b model
-        local models=$(curl -s "http://localhost:$OLLAMA_LOCAL_PORT/api/tags" 2>/dev/null | grep -o '"gemma:2b"' || echo "")
+        # Check for gemma4:31b-cloud model
+        local models=$(curl -s "http://localhost:$OLLAMA_LOCAL_PORT/api/tags" 2>/dev/null | grep -o '"gemma4:31b-cloud"' || echo "")
         
         if [ -n "$models" ]; then
-            log_success "Model 'gemma:2b' is available"
+            log_success "Model 'gemma4:31b-cloud' is available"
         else
-            log_warning "Model 'gemma:2b' not found"
-            print_fix_suggestion "Missing AI model" "Run: ollama pull gemma:2b"
+            log_warning "Model 'gemma4:31b-cloud' not found"
+            print_fix_suggestion "Missing AI model" "Run: ollama pull gemma4:31b-cloud"
         fi
         
         # List available models
