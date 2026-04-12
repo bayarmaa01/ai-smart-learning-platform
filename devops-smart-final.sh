@@ -209,9 +209,9 @@ deploy_monitoring() {
     kubectl apply -f k8s/monitoring-complete.yaml
     
     # Wait for monitoring services to be ready
-    wait_for_pods "monitoring" 300 "app=prometheus"
-    wait_for_pods "monitoring" 180 "app=grafana"
-    wait_for_pods "monitoring" 120 "app=node-exporter"
+    wait_for_pods "eduai-monitoring" 300 "app=prometheus"
+    wait_for_pods "eduai-monitoring" 180 "app=grafana"
+    wait_for_pods "eduai-monitoring" 120 "app=node-exporter"
     
     log_success "Monitoring stack deployed"
 }
@@ -225,7 +225,7 @@ deploy_argocd() {
     kubectl apply -f k8s/argocd-complete.yaml
     
     # Wait for ArgoCD to be ready
-    wait_for_pods "argocd" 300 "app.kubernetes.io/name=argocd-server"
+    wait_for_pods "eduai-argocd" 300 "app.kubernetes.io/name=argocd-server"
     
     log_success "ArgoCD deployed"
 }
@@ -248,15 +248,15 @@ setup_port_forwarding() {
     BACKEND_PID=$!
     
     log_info "Starting port forwarding for Grafana..."
-    kubectl port-forward -n monitoring svc/grafana-nodeport 5200:3000 &
+    kubectl port-forward -n eduai-monitoring svc/grafana-nodeport 5200:3000 &
     GRAFANA_PID=$!
     
     log_info "Starting port forwarding for Prometheus..."
-    kubectl port-forward -n monitoring svc/prometheus-nodeport 9093:9090 &
+    kubectl port-forward -n eduai-monitoring svc/prometheus-nodeport 9093:9090 &
     PROMETHEUS_PID=$!
     
     log_info "Starting port forwarding for ArgoCD..."
-    kubectl port-forward -n argocd svc/argocd-server-nodeport 18080:8080 &
+    kubectl port-forward -n eduai-argocd svc/argocd-server-nodeport 18080:8080 &
     ARGOCD_PID=$!
     
     # Wait a moment for port forwarding to establish
