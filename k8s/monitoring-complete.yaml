@@ -5,16 +5,16 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: monitoring
+  name: eduai-monitoring
   labels:
-    name: monitoring
+    name: eduai-monitoring
 ---
 # Prometheus ConfigMap
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  namespace: monitoring
+  namespace: eduai-monitoring
 data:
   prometheus.yml: |
     global:
@@ -231,7 +231,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: prometheus
 spec:
@@ -288,7 +288,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: prometheus
   annotations:
@@ -309,7 +309,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus-nodeport
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: prometheus
 spec:
@@ -327,7 +327,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-config
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: grafana
 data:
@@ -390,7 +390,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-dashboards
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: grafana
 data:
@@ -470,7 +470,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: grafana
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: grafana
 spec:
@@ -550,7 +550,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: grafana
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: grafana
 spec:
@@ -568,7 +568,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: grafana-nodeport
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: grafana
 spec:
@@ -586,7 +586,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: node-exporter
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: node-exporter
 spec:
@@ -646,7 +646,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: node-exporter
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: node-exporter
   annotations:
@@ -667,7 +667,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: alertmanager-config
-  namespace: monitoring
+  namespace: eduai-monitoring
 data:
   alertmanager.yml: |
     global:
@@ -700,7 +700,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: alertmanager
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: alertmanager
 spec:
@@ -748,7 +748,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: alertmanager
-  namespace: monitoring
+  namespace: eduai-monitoring
   labels:
     app: alertmanager
 spec:
