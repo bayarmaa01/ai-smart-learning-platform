@@ -283,7 +283,7 @@ grafana:
     type: NodePort
     port: 3000
     targetPort: 3000
-    nodePort: 3004
+    nodePort: 30004
   persistence:
     enabled: true
     storageClassName: standard
