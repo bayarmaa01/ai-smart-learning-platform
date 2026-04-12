@@ -390,7 +390,10 @@ EOF
     
     # Wait for pods to be ready (with timeout handling)
     log_info "Waiting for monitoring pods to be ready..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n monitoring --timeout=300s || log_info "Grafana pods not ready within timeout"
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n monitoring --timeout=600s || {
+        log_info "Grafana pods not ready within 10 minutes, checking status..."
+        kubectl get pods -l app.kubernetes.io/name=grafana -n monitoring -o wide || log_info "Grafana pods status check failed"
+    }
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n monitoring --timeout=300s || log_info "Prometheus pods not ready within timeout"
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=alertmanager -n monitoring --timeout=300s || log_info "AlertManager pods not ready within timeout"
     
@@ -403,6 +406,15 @@ EOF
 # Deploy ArgoCD
 deploy_argocd() {
     log_step "Deploying ArgoCD for GitOps..."
+    
+    # Install ArgoCD CRDs first
+    log_info "Installing ArgoCD Custom Resource Definitions..."
+    kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/crds.yaml || {
+        log_info "CRD installation failed, trying alternative source..."
+        kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.0/manifests/crds.yaml || {
+            log_info "Alternative CRD installation failed, continuing with basic deployment..."
+        }
+    }
     
     # Deploy ArgoCD
     log_info "Deploying ArgoCD server and applications..."
