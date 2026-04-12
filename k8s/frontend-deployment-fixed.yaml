@@ -105,5 +105,5 @@ spec:
   ports:
     - port: 3000
       targetPort: 8080
-      nodePort: 3200
+      nodePort: 30320
   type: NodePort

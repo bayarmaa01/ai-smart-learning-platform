@@ -248,15 +248,15 @@ setup_port_forwarding() {
     BACKEND_PID=$!
     
     log_info "Starting port forwarding for Grafana..."
-    kubectl port-forward -n monitoring svc/grafana 5200:3000 &
+    kubectl port-forward -n monitoring svc/grafana-nodeport 5200:3000 &
     GRAFANA_PID=$!
     
     log_info "Starting port forwarding for Prometheus..."
-    kubectl port-forward -n monitoring svc/prometheus 9093:9090 &
+    kubectl port-forward -n monitoring svc/prometheus-nodeport 9093:9090 &
     PROMETHEUS_PID=$!
     
     log_info "Starting port forwarding for ArgoCD..."
-    kubectl port-forward -n argocd svc/argocd-server 18080:8080 &
+    kubectl port-forward -n argocd svc/argocd-server-nodeport 18080:8080 &
     ARGOCD_PID=$!
     
     # Wait a moment for port forwarding to establish
