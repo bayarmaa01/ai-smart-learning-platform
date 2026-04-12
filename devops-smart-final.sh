@@ -196,24 +196,202 @@ deploy_applications() {
     log_success "Applications deployed"
 }
 
-# Deploy monitoring stack
+# Deploy production monitoring stack with Helm
 deploy_monitoring() {
-    log_step "Deploying monitoring stack..."
+    log_step "Deploying production monitoring stack..."
     
-    # Deploy service accounts and RBAC
-    log_info "Setting up monitoring RBAC..."
-    kubectl apply -f k8s/service-accounts-monitoring.yaml
+    # Install Helm if not exists
+    if ! command -v helm &> /dev/null; then
+        log_info "Installing Helm..."
+        curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+        chmod 700 get_helm.sh
+        ./get_helm.sh
+        rm -f get_helm.sh
+        log_success "Helm installed"
+    fi
     
-    # Deploy complete monitoring stack
-    log_info "Deploying Prometheus, Grafana, AlertManager..."
-    kubectl apply -f k8s/monitoring-complete.yaml
+    # Add Helm repositories
+    log_info "Adding Prometheus Helm repository..."
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm repo update
     
-    # Wait for monitoring services to be ready
-    wait_for_pods "eduai-monitoring" 300 "app=prometheus"
-    wait_for_pods "eduai-monitoring" 180 "app=grafana"
-    wait_for_pods "eduai-monitoring" 120 "app=node-exporter"
+    # Create monitoring namespace
+    kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
     
-    log_success "Monitoring stack deployed"
+    # Prepare production values
+    log_info "Preparing production monitoring configuration..."
+    cat > monitoring-values.yaml <<EOF
+# Production-grade kube-prometheus-stack configuration
+global:
+  imageRegistry: ""
+
+prometheusOperator:
+  enabled: true
+  createCustomResource: true
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    retention: 30d
+    retentionSize: "10GB"
+    enableAdminAPI: true
+    walCompression: true
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 8Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 400Mi
+      limits:
+        cpu: 1000m
+        memory: 2000Mi
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    retention: 120h
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 100Mi
+      limits:
+        cpu: 200m
+        memory: 500Mi
+
+grafana:
+  enabled: true
+  adminUser: admin
+  adminPassword: admin
+  service:
+    type: NodePort
+    port: 3000
+    targetPort: 3000
+    nodePort: 3004
+  persistence:
+    enabled: true
+    storageClassName: standard
+    accessModes: ["ReadWriteOnce"]
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 250Mi
+    limits:
+      cpu: 500m
+      memory: 500Mi
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+          access: proxy
+          isDefault: true
+          jsonData:
+            timeInterval: "5s"
+            queryTimeout: "60s"
+            httpMethod: "POST"
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'default'
+          orgId: 1
+          folder: ''
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 8588
+        revision: 1
+        datasource: Prometheus
+      node-exporter-full:
+        gnetId: 1860
+        revision: 23
+        datasource: Prometheus
+      pod-monitoring:
+        gnetId: 6417
+        revision: 1
+        datasource: Prometheus
+      api-server:
+        gnetId: 15757
+        revision: 1
+        datasource: Prometheus
+      compute-resources:
+        gnetId: 405
+        revision: 1
+        datasource: Prometheus
+      network-monitoring:
+        gnetId: 3132
+        revision: 1
+        datasource: Prometheus
+      state-metrics:
+        gnetId: 13332
+        revision: 1
+        datasource: Prometheus
+
+nodeExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+kubeStateMetrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+
+defaultServiceMonitors:
+  enabled: true
+EOF
+
+    # Install kube-prometheus-stack
+    log_info "Installing kube-prometheus-stack..."
+    if helm status kube-prometheus -n monitoring &> /dev/null; then
+        helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --values monitoring-values.yaml \
+            --wait \
+            --timeout 10m
+    else
+        helm install kube-prometheus prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --values monitoring-values.yaml \
+            --wait \
+            --timeout 10m
+    fi
+    
+    # Wait for pods to be ready
+    log_info "Waiting for monitoring pods to be ready..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-grafana -n monitoring --timeout=300s || true
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-prometheus -n monitoring --timeout=300s || true
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-alertmanager -n monitoring --timeout=300s || true
+    
+    # Clean up values file
+    rm -f monitoring-values.yaml
+    
+    log_success "Production monitoring stack deployed"
 }
 
 # Deploy ArgoCD
@@ -247,12 +425,16 @@ setup_port_forwarding() {
     kubectl port-forward -n "$NAMESPACE" svc/backend-nodeport 4200:5000 &
     BACKEND_PID=$!
     
+    log_info "Starting port forwarding for AI services..."
+    kubectl port-forward -n "$NAMESPACE" svc/backend-nodeport 5200:5000 &
+    AI_PID=$!
+    
     log_info "Starting port forwarding for Grafana..."
-    kubectl port-forward -n eduai-monitoring svc/grafana-nodeport 5200:3000 &
+    kubectl port-forward -n monitoring svc/kube-prometheus-stack-grafana 3004:3000 &
     GRAFANA_PID=$!
     
     log_info "Starting port forwarding for Prometheus..."
-    kubectl port-forward -n eduai-monitoring svc/prometheus-nodeport 9093:9090 &
+    kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9093:9090 &
     PROMETHEUS_PID=$!
     
     log_info "Starting port forwarding for ArgoCD..."
@@ -265,6 +447,7 @@ setup_port_forwarding() {
     # Save PIDs for cleanup
     echo $FRONTEND_PID > /tmp/frontend-portforward.pid
     echo $BACKEND_PID > /tmp/backend-portforward.pid
+    echo $AI_PID > /tmp/ai-portforward.pid
     echo $GRAFANA_PID > /tmp/grafana-portforward.pid
     echo $PROMETHEUS_PID > /tmp/prometheus-portforward.pid
     echo $ARGOCD_PID > /tmp/argocd-portforward.pid
@@ -363,10 +546,10 @@ show_access_info() {
     echo "📱 LOCAL ACCESS:"
     echo "  Frontend:  http://localhost:3200"
     echo "  Backend:   http://localhost:4200"
-    echo "  AI Chat:   http://localhost:3200/ai-chat"
+    echo "  AI Chat:   http://localhost:5200/ai-chat"
     echo ""
     echo "📊 MONITORING & DEVOPS:"
-    echo "  Grafana:    http://localhost:5200 (admin/admin)"
+    echo "  Grafana:    http://localhost:3004 (admin/admin) - Production Dashboards"
     echo "  Prometheus: http://localhost:9093"
     echo "  ArgoCD:     http://localhost:18080 (admin/admin123)"
     echo ""
@@ -382,6 +565,7 @@ show_access_info() {
     echo "  View pods:     kubectl get pods -n $NAMESPACE"
     echo "  View logs:     kubectl logs -n $NAMESPACE -l app=backend"
     echo "  Monitoring:    kubectl get pods -n monitoring"
+    echo "  Monitoring:    kubectl get svc -n monitoring"
     echo "  ArgoCD:       kubectl get applications -n argocd"
     echo "  Stop forward:  kill \$(cat /tmp/*-portforward.pid)"
     echo "  Run tests:     node test-platform.js"
