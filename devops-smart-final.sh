@@ -369,24 +369,30 @@ EOF
     # Install kube-prometheus-stack
     log_info "Installing kube-prometheus-stack..."
     if helm status kube-prometheus -n monitoring &> /dev/null; then
-        helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack \
+        log_info "Upgrading existing installation..."
+        if ! helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --values monitoring-values.yaml \
-            --wait \
-            --timeout 10m
+            --timeout 20m; then
+            warning "Monitoring upgrade failed, continuing with existing installation"
+        fi
     else
-        helm install kube-prometheus prometheus-community/kube-prometheus-stack \
+        log_info "Installing new monitoring stack..."
+        if ! helm install kube-prometheus prometheus-community/kube-prometheus-stack \
             --namespace monitoring \
             --values monitoring-values.yaml \
-            --wait \
-            --timeout 10m
+            --timeout 20m; then
+            warning "Monitoring installation failed, continuing without monitoring"
+            rm -f monitoring-values.yaml
+            return
+        fi
     fi
     
-    # Wait for pods to be ready
+    # Wait for pods to be ready (with timeout handling)
     log_info "Waiting for monitoring pods to be ready..."
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-grafana -n monitoring --timeout=300s || true
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-prometheus -n monitoring --timeout=300s || true
-    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-alertmanager -n monitoring --timeout=300s || true
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-grafana -n monitoring --timeout=300s || warning "Grafana pods not ready within timeout"
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-prometheus -n monitoring --timeout=300s || warning "Prometheus pods not ready within timeout"
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kube-prometheus-stack-alertmanager -n monitoring --timeout=300s || warning "AlertManager pods not ready within timeout"
     
     # Clean up values file
     rm -f monitoring-values.yaml
