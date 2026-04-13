@@ -50,7 +50,7 @@ GRAFANA_PID=$!
 log "Grafana: http://localhost:3004 (NodePort: $MINIKUBE_IP:30004)"
 
 # Prometheus (localhost:9093 -> NodePort 30930)
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9093:9090 &
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-kube-prome-prometheus 9093:9090 &
 PROMETHEUS_PID=$!
 log "Prometheus: http://localhost:9093 (NodePort: $MINIKUBE_IP:30930)"
 
