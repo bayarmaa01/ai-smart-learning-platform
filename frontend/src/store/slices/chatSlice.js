@@ -5,7 +5,7 @@ export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
   async ({ message, sessionId }, { rejectWithValue }) => {
     try {
-      const response = await api.post('/chat', { message });
+      const response = await api.post('/ai/chat', { message });
       return response.data;
     } catch (err) {
       return rejectWithValue(err.response?.data?.error || 'AI service unavailable');
