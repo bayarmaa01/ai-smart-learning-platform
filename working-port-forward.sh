@@ -49,40 +49,20 @@ kubectl port-forward -n eduai svc/backend 5201:5000 &
 AI_PID=$!
 log "AI Chat: http://localhost:5201 (NodePort: $MINIKUBE_IP:30420)"
 
-# Check if Grafana exists and forward
-if kubectl get svc -n monitoring | grep -q grafana; then
-    GRAFANA_SVC=$(kubectl get svc -n monitoring | grep grafana | awk '{print $1}')
-    kubectl port-forward -n monitoring svc/$GRAFANA_SVC 3004:3000 &
-    GRAFANA_PID=$!
-    log "Grafana: http://localhost:3004 (NodePort: $MINIKUBE_IP:30004)"
-else
-    log "Grafana: Not available - recreating..."
-    helm upgrade kube-prometheus prometheus-community/kube-prometheus-stack \
-        --namespace monitoring \
-        --reuse-values
-    sleep 10
-    if kubectl get svc -n monitoring | grep -q grafana; then
-        GRAFANA_SVC=$(kubectl get svc -n monitoring | grep grafana | awk '{print $1}')
-        kubectl port-forward -n monitoring svc/$GRAFANA_SVC 3004:3000 &
-        GRAFANA_PID=$!
-        log "Grafana: http://localhost:3004 (NodePort: $MINIKUBE_IP:30004)"
-    fi
-fi
+# Grafana (localhost:3004) - use standard service name
+kubectl port-forward -n monitoring svc/kube-prometheus-grafana 3004:3000 &
+GRAFANA_PID=$!
+log "Grafana: http://localhost:3004 (admin/admin)"
 
-# Prometheus (localhost:9093)
-PROMETHEUS_SVC=$(kubectl get svc -n monitoring | grep prometheus | head -1 | awk '{print $1}')
-if [ -n "$PROMETHEUS_SVC" ]; then
-    kubectl port-forward -n monitoring svc/$PROMETHEUS_SVC 9093:9090 &
-    PROMETHEUS_PID=$!
-    log "Prometheus: http://localhost:9093 (NodePort: $MINIKUBE_IP:30930)"
-fi
+# Prometheus (localhost:9093) - use standard service name
+kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-kube-prome-prometheus 9093:9090 &
+PROMETHEUS_PID=$!
+log "Prometheus: http://localhost:9093"
 
-# ArgoCD (localhost:18080)
-if kubectl get svc -n eduai-argocd | grep -q argocd-server; then
-    kubectl port-forward -n eduai-argocd svc/argocd-server 18080:8080 &
-    ARGOCD_PID=$!
-    log "ArgoCD: http://localhost:18080 (NodePort: $MINIKUBE_IP:30880)"
-fi
+# ArgoCD (localhost:18080) - use standard service name
+kubectl port-forward -n eduai-argocd svc/argocd-server 18080:8080 &
+ARGOCD_PID=$!
+log "ArgoCD: http://localhost:18080 (admin/admin123)"
 
 # Wait for port forwards to establish
 sleep 5
