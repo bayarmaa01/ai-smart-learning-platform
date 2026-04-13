@@ -5,8 +5,12 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run version:patch && vite build",
+    "build:prod": "npm run version:patch && NODE_ENV=production vite build",
     "preview": "vite preview",
+    "version:patch": "node -e \"const pkg=require('./package.json'); const timestamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19); pkg.version=pkg.version.replace(/\\+\\d+$/,'')+'+'+timestamp; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2));\"",
+    "version:minor": "npm version minor && npm run version:patch",
+    "version:major": "npm version major && npm run version:patch",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:ci": "vitest run --coverage --reporter=junit --reporter=default --outputFile=test-results.xml",
