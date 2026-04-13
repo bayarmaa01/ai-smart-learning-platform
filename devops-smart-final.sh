@@ -415,16 +415,77 @@ deploy_argocd() {
     
     # Install ArgoCD CRDs first
     log_info "Installing ArgoCD Custom Resource Definitions..."
-    kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.9.0/manifests/crds.yaml || {
+    
+    # Clean up existing service account to avoid Helm conflicts
+    kubectl delete serviceaccount argocd-server -n eduai-argocd --ignore-not-found=true
+    sleep 2
+    
+    # Try working CRD URLs
+    kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.3/manifests/crds.yaml || {
         log_info "CRD installation failed, trying alternative source..."
-        kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.5/manifests/crds.yaml || {
-            log_info "Alternative CRD installation failed, installing via helm..."
-            helm repo add argo https://argoproj.github.io/argo-helm
-            helm install argocd argo/argo-cd --namespace eduai-argocd --create-namespace || {
-                log_info "Helm installation failed, continuing with basic deployment..."
-            }
+        kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.2/manifests/crds.yaml || {
+            log_info "Alternative CRD installation failed, installing manually..."
+            
+            # Create Application CRD manually
+            cat <<EOF | kubectl apply -f -
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: applications.argoproj.io
+spec:
+  group: argoproj.io
+  names:
+    kind: Application
+    listKind: ApplicationList
+    plural: applications
+    singular: application
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+EOF
+
+            # Create AppProject CRD manually
+            cat <<EOF | kubectl apply -f -
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: appprojects.argoproj.io
+spec:
+  group: argoproj.io
+  names:
+    kind: AppProject
+    listKind: AppProjectList
+    plural: appprojects
+    singular: appproject
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+EOF
         }
     }
+    
+    # Wait for CRDs to be established
+    sleep 10
+    
+    # Verify CRDs are installed
+    if kubectl get crd applications.argoproj.io &>/dev/null && kubectl get crd appprojects.argoproj.io &>/dev/null; then
+        log_success "ArgoCD CRDs installed successfully"
+    else
+        log_info "CRDs not found, checking status..."
+        kubectl get crd | grep argoproj || log_info "No argoproj CRDs found"
+    fi
     
     # Deploy ArgoCD
     log_info "Deploying ArgoCD server and applications..."
