@@ -39,10 +39,10 @@ kubectl port-forward -n eduai svc/frontend-nodeport 3200:3000 &
 FRONTEND_PID=$!
 log "Frontend: http://localhost:3200 (NodePort: $MINIKUBE_IP:30320)"
 
-# Backend (localhost:4200 -> NodePort 30420)  
-kubectl port-forward -n eduai svc/backend-nodeport 4200:5000 &
+# Backend (localhost:5000 -> NodePort 30420)  
+kubectl port-forward -n eduai svc/backend-nodeport 5000:5000 &
 BACKEND_PID=$!
-log "Backend: http://localhost:4200 (NodePort: $MINIKUBE_IP:30420)"
+log "Backend: http://localhost:5000 (NodePort: $MINIKUBE_IP:30420)"
 
 # AI Chat (localhost:5200 -> NodePort 30420)
 kubectl port-forward -n eduai svc/backend-nodeport 5200:5000 &
@@ -95,7 +95,7 @@ else
     error "Frontend not accessible"
 fi
 
-if curl -s http://localhost:4200/api/v1/health >/dev/null; then
+if curl -s http://localhost:5000/api/v1/health >/dev/null; then
     success "Backend API accessible"
 else
     error "Backend API not accessible"
@@ -109,13 +109,13 @@ echo "==============================================="
 echo ""
 echo "Working URLs:"
 echo "  Frontend:     http://localhost:3200"
-echo "  Backend:      http://localhost:4200"
+echo "  Backend:      http://localhost:5000"
 echo "  AI Chat:      http://localhost:5200/ai-chat"
 echo ""
 echo "API Testing:"
-echo "  Health:       http://localhost:4200/api/v1/health"
-echo "  Login:        http://localhost:4200/api/v1/auth/login"
-echo "  Register:     http://localhost:4200/api/v1/auth/register"
+echo "  Health:       http://localhost:5000/api/v1/health"
+echo "  Login:        http://localhost:5000/api/v1/auth/login"
+echo "  Register:     http://localhost:5000/api/v1/auth/register"
 echo ""
 echo "Monitoring:"
 echo "  Grafana:      http://localhost:3004 (admin/admin)"
