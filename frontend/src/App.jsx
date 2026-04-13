@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchCurrentUser } from './store/slices/authSlice';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import { useAutoRefresh } from './hooks/useAutoRefresh';
+import AutoRefreshIndicator from './components/AutoRefreshIndicator';
 
 import DashboardLayout from './layouts/DashboardLayout';
 import AuthLayout from './layouts/AuthLayout';
@@ -42,7 +44,8 @@ import NotFoundPage from './pages/NotFound';
 
 export default function App() {
   const dispatch = useDispatch();
-  const { isInitialized } = useSelector((state) => state.auth);
+  const { isAuthenticated, isLoading } = useSelector((state) => state.auth);
+  const { version, isChecking, forceRefresh } = useAutoRefresh(5000);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -59,6 +62,11 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <AutoRefreshIndicator 
+        isChecking={isChecking} 
+        version={version} 
+        onForceRefresh={forceRefresh} 
+      />
       <Routes>
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<LoginPage />} />
