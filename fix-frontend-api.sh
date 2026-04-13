@@ -1,6 +1,5 @@
 #!/bin/bash
 
-<<<<<<< HEAD
 # Fix frontend API configuration and rebuild
 echo "🔧 Fixing Frontend API Configuration..."
 
@@ -40,7 +39,6 @@ echo "  Socket URL: http://localhost:5001"
 echo ""
 echo "🧪 Test the API:"
 echo "curl -f http://localhost:5001/api/v1/health"
-=======
 # =============================================================================
 # Fix Frontend API Configuration
 # Rebuilds frontend with correct API URL
@@ -183,4 +181,3 @@ echo "2. Try registering/logging in again"
 echo ""
 echo "The 405 errors should now be resolved!"
 echo ""
->>>>>>> 2c7f6c25a0342ea9f570f9c64b10b57e1043505f
