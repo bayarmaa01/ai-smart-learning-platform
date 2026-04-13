@@ -52,18 +52,39 @@ AI_PID=$!
 
 # Grafana (localhost:3004 -> grafana service 3000)
 log "Setting up Grafana port forward (localhost:3004)..."
-kubectl port-forward -n monitoring svc/kube-prometheus-grafana 3004:3000 &
+kubectl port-forward -n monitoring svc/kube-prometheus-grafana 3004:3000 2>/dev/null &
 GRAFANA_PID=$!
+if [ $? -eq 0 ]; then
+    log "Grafana port forward started"
+else
+    log "Grafana service not found, trying alternative..."
+    kubectl port-forward -n monitoring svc/grafana 3004:3000 2>/dev/null &
+    GRAFANA_PID=$!
+fi
 
 # Prometheus (localhost:9093 -> prometheus service 9090)
 log "Setting up Prometheus port forward (localhost:9093)..."
-kubectl port-forward -n monitoring svc/kube-prometheus-kube-prome-prometheus 9093:9090 &
+kubectl port-forward -n monitoring svc/kube-prometheus-prometheus 9093:9090 2>/dev/null &
 PROMETHEUS_PID=$!
+if [ $? -eq 0 ]; then
+    log "Prometheus port forward started"
+else
+    log "Prometheus service not found, trying alternative..."
+    kubectl port-forward -n monitoring svc/prometheus 9093:9090 2>/dev/null &
+    PROMETHEUS_PID=$!
+fi
 
 # ArgoCD (localhost:18080 -> argocd service 8080)
 log "Setting up ArgoCD port forward (localhost:18080)..."
-kubectl port-forward -n eduai-argocd svc/argocd-server 18080:8080 &
+kubectl port-forward -n eduai-argocd svc/argocd-server 18080:8080 2>/dev/null &
 ARGOCD_PID=$!
+if [ $? -eq 0 ]; then
+    log "ArgoCD port forward started"
+else
+    log "ArgoCD service not found, trying alternative..."
+    kubectl port-forward -n argocd svc/argocd-server 18080:8080 2>/dev/null &
+    ARGOCD_PID=$!
+fi
 
 # Wait for port forwards to establish
 sleep 5
@@ -99,11 +120,25 @@ echo "  Login:        http://localhost:4200/api/v1/auth/login"
 echo "  AI Chat:      http://localhost:4200/api/v1/ai/chat"
 echo ""
 echo "MONITORING SERVICES:"
-echo "  Grafana:      http://localhost:3004 (admin/admin)"
-echo "  Prometheus:   http://localhost:9093"
+if curl -s http://localhost:3004 >/dev/null; then
+    echo "  Grafana:      http://localhost:3004 (admin/admin) [WORKING]"
+else
+    echo "  Grafana:      http://localhost:3004 (admin/admin) [NOT ACCESSIBLE]"
+fi
+
+if curl -s http://localhost:9093 >/dev/null; then
+    echo "  Prometheus:   http://localhost:9093 [WORKING]"
+else
+    echo "  Prometheus:   http://localhost:9093 [NOT ACCESSIBLE]"
+fi
+
 echo ""
 echo "DEVOPS SERVICES:"
-echo "  ArgoCD:       http://localhost:18080 (admin/admin123)"
+if curl -s http://localhost:18080 >/dev/null; then
+    echo "  ArgoCD:       http://localhost:18080 (admin/admin123) [WORKING]"
+else
+    echo "  ArgoCD:       http://localhost:18080 (admin/admin123) [NOT ACCESSIBLE]"
+fi
 echo ""
 echo "==============================================="
 echo ""
