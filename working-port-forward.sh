@@ -34,20 +34,20 @@ MINIKUBE_IP=$(minikube ip)
 
 log "Starting port forwarding..."
 
-# Frontend (localhost:3200 -> NodePort 30320)
-kubectl port-forward -n eduai svc/frontend-nodeport 3200:3000 &
+# Frontend (localhost:3000 -> frontend service 3000)
+kubectl port-forward -n eduai svc/frontend 3000:3000 &
 FRONTEND_PID=$!
-log "Frontend: http://localhost:3200 (NodePort: $MINIKUBE_IP:30320)"
+log "Frontend: http://localhost:3000 (NodePort: $MINIKUBE_IP:30320)"
 
-# Backend (localhost:5000 -> NodePort 30420)  
-kubectl port-forward -n eduai svc/backend-nodeport 5000:5000 &
+# Backend (localhost:5001 -> backend service 5000) - using 5001 to avoid conflict
+kubectl port-forward -n eduai svc/backend 5001:5000 &
 BACKEND_PID=$!
-log "Backend: http://localhost:5000 (NodePort: $MINIKUBE_IP:30420)"
+log "Backend: http://localhost:5001 (NodePort: $MINIKUBE_IP:30420)"
 
-# AI Chat (localhost:5200 -> NodePort 30420)
-kubectl port-forward -n eduai svc/backend-nodeport 5200:5000 &
+# AI Chat (localhost:5201 -> backend service 5000)
+kubectl port-forward -n eduai svc/backend 5201:5000 &
 AI_PID=$!
-log "AI Chat: http://localhost:5200 (NodePort: $MINIKUBE_IP:30420)"
+log "AI Chat: http://localhost:5201 (NodePort: $MINIKUBE_IP:30420)"
 
 # Check if Grafana exists and forward
 if kubectl get svc -n monitoring | grep -q grafana; then
@@ -89,13 +89,13 @@ sleep 5
 
 # Test connections
 log "Testing connections..."
-if curl -s http://localhost:3200 >/dev/null; then
+if curl -s http://localhost:3000 >/dev/null; then
     success "Frontend accessible"
 else
     error "Frontend not accessible"
 fi
 
-if curl -s http://localhost:5000/api/v1/health >/dev/null; then
+if curl -s http://localhost:5001/api/v1/health >/dev/null; then
     success "Backend API accessible"
 else
     error "Backend API not accessible"
@@ -108,14 +108,14 @@ echo "  PORT FORWARDING ACTIVE"
 echo "==============================================="
 echo ""
 echo "Working URLs:"
-echo "  Frontend:     http://localhost:3200"
-echo "  Backend:      http://localhost:5000"
-echo "  AI Chat:      http://localhost:5200/ai-chat"
+echo "  Frontend:     http://localhost:3000"
+echo "  Backend:      http://localhost:5001"
+echo "  AI Chat:      http://localhost:5201/ai-chat"
 echo ""
 echo "API Testing:"
-echo "  Health:       http://localhost:5000/api/v1/health"
-echo "  Login:        http://localhost:5000/api/v1/auth/login"
-echo "  Register:     http://localhost:5000/api/v1/auth/register"
+echo "  Health:       http://localhost:5001/api/v1/health"
+echo "  Login:        http://localhost:5001/api/v1/auth/login"
+echo "  Register:     http://localhost:5001/api/v1/auth/register"
 echo ""
 echo "Monitoring:"
 echo "  Grafana:      http://localhost:3004 (admin/admin)"
