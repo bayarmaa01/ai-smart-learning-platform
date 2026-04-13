@@ -388,6 +388,12 @@ EOF
         fi
     fi
     
+    # Reset problematic Grafana deployment
+    log_info "Resetting Grafana deployment to fix Error state..."
+    kubectl delete deployment kube-prometheus-grafana -n monitoring --ignore-not-found=true
+    kubectl delete pod kube-prometheus-grafana-769976b8f4-68s4l -n monitoring --ignore-not-found=true
+    sleep 5
+    
     # Wait for pods to be ready (with timeout handling)
     log_info "Waiting for monitoring pods to be ready..."
     kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n monitoring --timeout=600s || {
@@ -409,10 +415,14 @@ deploy_argocd() {
     
     # Install ArgoCD CRDs first
     log_info "Installing ArgoCD Custom Resource Definitions..."
-    kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/crds.yaml || {
+    kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.9.0/manifests/crds.yaml || {
         log_info "CRD installation failed, trying alternative source..."
-        kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.0/manifests/crds.yaml || {
-            log_info "Alternative CRD installation failed, continuing with basic deployment..."
+        kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.8.5/manifests/crds.yaml || {
+            log_info "Alternative CRD installation failed, installing via helm..."
+            helm repo add argo https://argoproj.github.io/argo-helm
+            helm install argocd argo/argo-cd --namespace eduai-argocd --create-namespace || {
+                log_info "Helm installation failed, continuing with basic deployment..."
+            }
         }
     }
     
