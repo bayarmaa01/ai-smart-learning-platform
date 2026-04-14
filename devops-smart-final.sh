@@ -81,6 +81,25 @@ wait_ready() {
   fi
 }
 
+wait_rollout() {
+  local ns="$1"
+  local deployment="$2"
+  local timeout="${3:-300s}"
+  log "Waiting rollout for deployment/$deployment in $ns"
+  if ! kubectl rollout status "deployment/$deployment" -n "$ns" --timeout="$timeout"; then
+    warn "Rollout timeout for deployment/$deployment, collecting diagnostics"
+    kubectl get pods -n "$ns" -l "app=$deployment" -o wide || true
+    kubectl describe deployment "$deployment" -n "$ns" || true
+    kubectl get pods -n "$ns" -l "app=$deployment" --no-headers 2>/dev/null | awk '$2 != "1/1" {print $1}' | while read -r pod; do
+      [ -n "$pod" ] || continue
+      kubectl describe pod "$pod" -n "$ns" >/tmp/"$pod"-describe.log 2>&1 || true
+      kubectl logs "$pod" -n "$ns" --all-containers --tail=120 >/tmp/"$pod"-logs.log 2>&1 || true
+      kubectl delete pod "$pod" -n "$ns" --wait=false >/dev/null 2>&1 || true
+    done
+    kubectl rollout status "deployment/$deployment" -n "$ns" --timeout="$timeout"
+  fi
+}
+
 deploy_monitoring() {
   log "Deploying monitoring stack"
   kubectl create namespace "$MONITORING_NS" --dry-run=client -o yaml | kubectl apply -f -
@@ -170,8 +189,8 @@ main() {
 
   wait_ready "$NAMESPACE" "app=postgres"
   wait_ready "$NAMESPACE" "app=redis"
-  wait_ready "$NAMESPACE" "app=backend"
-  wait_ready "$NAMESPACE" "app=frontend"
+  wait_rollout "$NAMESPACE" "backend" "360s"
+  wait_rollout "$NAMESPACE" "frontend" "360s"
 
   deploy_monitoring
   deploy_argocd
