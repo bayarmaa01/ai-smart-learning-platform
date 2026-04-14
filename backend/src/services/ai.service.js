@@ -4,10 +4,20 @@ const { getCache, setCache } = require('../cache/redis');
 
 class AIService {
   constructor() {
-    this.ollamaUrl = process.env.OLLAMA_URL || 'http://host.docker.internal:11434';
+    this.ollamaUrls = this.buildOllamaUrls();
+    this.ollamaUrl = this.ollamaUrls[0];
     this.model = process.env.OLLAMA_MODEL || 'gemma4:31b';
     this.timeout = 30000; // 30 seconds for larger model
     this.maxRetries = 3;
+  }
+
+  buildOllamaUrls() {
+    const primary = process.env.OLLAMA_URL || 'http://host.minikube.internal:11434';
+    const fallbackRaw = process.env.OLLAMA_FALLBACK_URLS || '';
+    const urls = [primary, ...fallbackRaw.split(',')]
+      .map((url) => url.trim())
+      .filter(Boolean);
+    return [...new Set(urls)];
   }
 
   /**
@@ -53,31 +63,32 @@ class AIService {
 
     let lastError;
     
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      try {
-        logger.info(`AI Request attempt ${attempt}/${this.maxRetries}`);
-        
-        const response = await axios.post(`${this.ollamaUrl}/api/generate`, payload, {
-          timeout: this.timeout,
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+    for (const baseUrl of this.ollamaUrls) {
+      for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+        try {
+          logger.info(`AI Request to ${baseUrl} attempt ${attempt}/${this.maxRetries}`);
 
-        if (response.data && response.data.response) {
-          logger.info('AI response received successfully');
-          return response.data.response;
-        } else {
+          const response = await axios.post(`${baseUrl}/api/generate`, payload, {
+            timeout: this.timeout,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (response.data && response.data.response) {
+            logger.info(`AI response received successfully from ${baseUrl}`);
+            return response.data.response;
+          }
+
           throw new Error('Invalid response format from Ollama');
-        }
-      } catch (error) {
-        lastError = error;
-        logger.warn(`AI Request attempt ${attempt} failed:`, error.message);
-        
-        if (attempt < this.maxRetries) {
-          // Exponential backoff
-          const delay = Math.pow(2, attempt) * 1000;
-          await this.sleep(delay);
+        } catch (error) {
+          lastError = error;
+          logger.warn(`AI Request to ${baseUrl} attempt ${attempt} failed:`, error.message);
+
+          if (attempt < this.maxRetries) {
+            const delay = Math.pow(2, attempt) * 1000;
+            await this.sleep(delay);
+          }
         }
       }
     }
@@ -96,27 +107,31 @@ class AIService {
    * Health check for Ollama
    */
   async healthCheck() {
-    try {
-      const response = await axios.get(`${this.ollamaUrl}/api/tags`, {
-        timeout: 5000
-      });
-      
-      const hasGemma = response.data.models.some(model => 
-        model.name.includes('gemma4') && model.name.includes('31b')
-      );
-      
-      return {
-        status: 'healthy',
-        model: this.model,
-        available: hasGemma,
-        models: response.data.models
-      };
-    } catch (error) {
-      return {
-        status: 'unhealthy',
-        error: error.message
-      };
+    for (const baseUrl of this.ollamaUrls) {
+      try {
+        const response = await axios.get(`${baseUrl}/api/tags`, {
+          timeout: 5000,
+        });
+
+        const hasGemma = response.data.models.some((model) =>
+          model.name.includes('gemma4') && model.name.includes('31b')
+        );
+
+        return {
+          status: 'healthy',
+          endpoint: baseUrl,
+          model: this.model,
+          available: hasGemma,
+          models: response.data.models,
+        };
+      } catch (error) {
+        logger.warn(`AI health check failed for ${baseUrl}: ${error.message}`);
+      }
     }
+    return {
+      status: 'unhealthy',
+      error: 'All configured Ollama endpoints are unreachable',
+    };
   }
 }
 

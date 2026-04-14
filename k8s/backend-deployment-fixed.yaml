@@ -66,7 +66,9 @@ spec:
             
             # AI/Ollama Configuration
             - name: OLLAMA_URL
-              value: "http://host.docker.internal:11434"
+              value: "http://host.minikube.internal:11434"
+            - name: OLLAMA_FALLBACK_URLS
+              value: "http://host.minikube.internal:11434,http://host.docker.internal:11434,http://172.17.0.1:11434"
             - name: OLLAMA_MODEL
               value: "gemma4:31b"
             
@@ -82,7 +84,7 @@ spec:
             
             # CORS Configuration
             - name: ALLOWED_ORIGINS
-              value: "http://localhost:3000,http://127.0.0.1:3000,http://192.168.49.2:30007,https://ailearn.duckdns.org"
+              value: "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3200,http://127.0.0.1:3200,http://localhost:4200,http://127.0.0.1:4200,http://192.168.49.2:30007,https://ailearn.duckdns.org"
             
           resources:
             requests:

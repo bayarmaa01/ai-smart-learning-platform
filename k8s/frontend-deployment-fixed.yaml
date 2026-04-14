@@ -36,13 +36,11 @@ spec:
           image: eduai-frontend:latest
           imagePullPolicy: Never
           ports:
-            - containerPort: 8080
+            - containerPort: 3000
               name: http
           env:
-            - name: REACT_APP_API_URL
-              value: "http://localhost:5000/api"
-            - name: REACT_APP_WS_URL
-              value: "ws://localhost:5000"
+            - name: VITE_API_URL
+              value: "http://localhost:4200/api/v1"
           resources:
             requests:
               cpu: "100m"
@@ -54,7 +52,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 8080
+              port: 3000
             initialDelaySeconds: 30
             periodSeconds: 15
             timeoutSeconds: 10
@@ -63,7 +61,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 8080
+              port: 3000
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
@@ -88,7 +86,7 @@ spec:
     app: frontend
   ports:
     - port: 3000
-      targetPort: 8080
+      targetPort: 3000
       name: http
   type: ClusterIP
 ---
@@ -104,6 +102,6 @@ spec:
     app: frontend
   ports:
     - port: 3000
-      targetPort: 8080
+      targetPort: 3000
       nodePort: 30320
   type: NodePort

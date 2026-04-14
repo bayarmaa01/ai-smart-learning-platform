@@ -3,6 +3,12 @@ const router = express.Router();
 const axios = require('axios');
 const { logger } = require('../utils/logger');
 
+const getOllamaUrls = () => {
+  const primary = process.env.OLLAMA_URL || 'http://host.minikube.internal:11434';
+  const fallbackRaw = process.env.OLLAMA_FALLBACK_URLS || '';
+  return [...new Set([primary, ...fallbackRaw.split(',')].map((x) => x.trim()).filter(Boolean))];
+};
+
 // Simple chat endpoint that connects directly to Ollama
 router.post('/chat', async (req, res) => {
   try {
@@ -15,28 +21,42 @@ router.post('/chat', async (req, res) => {
       });
     }
 
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://host.docker.internal:11434';
+    const ollamaUrls = getOllamaUrls();
     const model = process.env.OLLAMA_MODEL || 'gemma4:31b';
 
     logger.info(`Sending message to Ollama: ${message.substring(0, 100)}...`);
 
-    const response = await axios.post(`${ollamaUrl}/api/generate`, {
-      model: model,
-      prompt: `You are a helpful AI learning assistant. Please respond to this message in a friendly, educational way: "${message}"
+    let response;
+    let lastError;
+    for (const baseUrl of ollamaUrls) {
+      try {
+        response = await axios.post(`${baseUrl}/api/generate`, {
+          model: model,
+          prompt: `You are a helpful AI learning assistant. Please respond to this message in a friendly, educational way: "${message}"
 
 Provide a helpful, concise response that is appropriate for a learning platform.`,
-      stream: false,
-      options: {
-        temperature: 0.7,
-        top_p: 0.9,
-        max_tokens: 1000
+          stream: false,
+          options: {
+            temperature: 0.7,
+            top_p: 0.9,
+            max_tokens: 1000
+          }
+        }, {
+          timeout: 45000,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        break;
+      } catch (err) {
+        lastError = err;
+        logger.warn(`Ollama request failed for ${baseUrl}: ${err.message}`);
       }
-    }, {
-      timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    }
+
+    if (!response) {
+      throw lastError || new Error('All configured Ollama endpoints failed');
+    }
 
     if (response.data && response.data.response) {
       logger.info('Received response from Ollama');
@@ -64,14 +84,23 @@ Provide a helpful, concise response that is appropriate for a learning platform.
 // Health check for AI service
 router.get('/health', async (req, res) => {
   try {
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://host.docker.internal:11434';
+    const ollamaUrls = getOllamaUrls();
     const model = process.env.OLLAMA_MODEL || 'gemma4:31b';
+    let response;
+    for (const baseUrl of ollamaUrls) {
+      try {
+        response = await axios.get(`${baseUrl}/api/tags`, { timeout: 5000 });
+        if (response) break;
+      } catch (err) {
+        logger.warn(`AI health check failed for ${baseUrl}: ${err.message}`);
+      }
+    }
 
-    const response = await axios.get(`${ollamaUrl}/api/tags`, {
-      timeout: 5000
-    });
+    if (!response) {
+      throw new Error('No Ollama endpoint reachable');
+    }
 
-    const hasModel = response.data.models.some(m => m.name === model);
+    const hasModel = response.data.models.some(m => m.name === model || m.name.startsWith(`${model}:`));
 
     res.json({
       success: true,

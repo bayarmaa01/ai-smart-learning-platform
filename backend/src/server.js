@@ -42,7 +42,16 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://192.168.49.2:30007', 'https://ailearn.duckdns.org'],
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3200',
+    'http://127.0.0.1:3200',
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+    'http://192.168.49.2:30007',
+    'https://ailearn.duckdns.org',
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-Request-ID'],

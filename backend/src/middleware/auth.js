@@ -3,6 +3,11 @@ const { query } = require('../db/connection');
 const { getCache, setCache } = require('../cache/redis');
 const { AppError } = require('./errorHandler');
 
+const normalizeRole = (role) => {
+  if (role === 'teacher') return 'instructor';
+  return role;
+};
+
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -34,6 +39,7 @@ const verifyToken = async (req, res, next) => {
       }
 
       user = result.rows[0];
+      user.role = normalizeRole(user.role);
       await setCache(cacheUserKey, user, 300);
     }
 
@@ -56,11 +62,12 @@ const verifyToken = async (req, res, next) => {
 };
 
 const authorize = (...roles) => {
+  const normalizedRoles = roles.map(normalizeRole);
   return (req, res, next) => {
     if (!req.user) {
       return next(new AppError('Authentication required', 401, 'UNAUTHORIZED'));
     }
-    if (!roles.includes(req.user.role)) {
+    if (!normalizedRoles.includes(normalizeRole(req.user.role))) {
       return next(new AppError('Insufficient permissions', 403, 'FORBIDDEN'));
     }
     next();
@@ -71,17 +78,11 @@ const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        error: 'No token provided'
-      });
+      return next();
     }
     await verifyToken(req, res, next);
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: 'Authentication error'
-    });
+    return next();
   }
 };
 

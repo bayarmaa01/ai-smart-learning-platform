@@ -52,11 +52,12 @@ router.get('/users', async (req, res) => {
 
 router.patch('/users/:id/role', async (req, res) => {
   const { role } = req.body;
+  const normalizedRole = role === 'teacher' ? 'instructor' : role;
   const validRoles = ['student', 'instructor', 'admin'];
-  if (!validRoles.includes(role)) {
+  if (!validRoles.includes(normalizedRole)) {
     return res.status(400).json({ success: false, error: { message: 'Invalid role' } });
   }
-  await query('UPDATE users SET role = $1 WHERE id = $2', [role, req.params.id]);
+  await query('UPDATE users SET role = $1 WHERE id = $2', [normalizedRole, req.params.id]);
   res.json({ success: true, message: 'Role updated' });
 });
 
