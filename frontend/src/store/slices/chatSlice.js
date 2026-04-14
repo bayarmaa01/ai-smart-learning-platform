@@ -3,7 +3,7 @@ import api from '../../services/api';
 
 export const sendMessage = createAsyncThunk(
   'chat/sendMessage',
-  async ({ message, sessionId }, { rejectWithValue }) => {
+  async ({ message, sessionId: _sessionId }, { rejectWithValue }) => {
     try {
       const response = await api.post('/ai/chat', { message });
       return response.data;
