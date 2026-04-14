@@ -44,7 +44,7 @@ import NotFoundPage from './pages/NotFound';
 
 export default function App() {
   const dispatch = useDispatch();
-  const { isAuthenticated, isLoading } = useSelector((state) => state.auth);
+  const { isInitialized } = useSelector((state) => state.auth);
   const { version, isChecking, forceRefresh } = useAutoRefresh(5000);
 
   useEffect(() => {
