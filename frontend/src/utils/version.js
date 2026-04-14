@@ -31,21 +31,28 @@ const addVersionToUrl = (url) => {
   return `${url}${separator}v=${getVersion()}`;
 };
 
-// Auto-reload detection
+// Auto-reload detection - DISABLED to prevent constant refreshes
 let lastVersion = null;
 const checkForUpdates = () => {
+  // DISABLED: Auto-versioning causing constant page refreshes
+  return;
+  
   const currentVersion = getVersion();
   
   if (lastVersion && lastVersion !== currentVersion) {
-    console.log('🔄 Version changed, reloading UI...');
+    console.log('Version changed, reloading UI...');
     window.location.reload();
   }
   
   lastVersion = currentVersion;
 };
 
-// Initialize version checking
+// Initialize version checking - DISABLED to prevent constant refreshes
 const initVersionChecking = (intervalMs = 5000) => {
+  // DISABLED: Auto-versioning causing constant page refreshes
+  console.log('Auto-version checking disabled to prevent constant refreshes');
+  return;
+  
   // Check for version updates periodically
   setInterval(checkForUpdates, intervalMs);
   
