@@ -3,11 +3,13 @@
 // Handles automatic UI versioning and cache busting
 // =============================================================================
 
-// Get current version from package.json
+// Get stable build version (Vite env)
 const getVersion = () => {
-  return process.env.REACT_APP_VERSION || 
-         process.env.npm_package_version || 
-         '1.0.0-' + Date.now();
+  return (
+    import.meta.env.VITE_APP_VERSION ||
+    import.meta.env.VITE_BUILD_TIME ||
+    '1.0.0'
+  );
 };
 
 // Generate cache-busting query string
@@ -55,7 +57,9 @@ const initVersionChecking = (intervalMs = 5000) => {
   });
   
   // Store current version
-  localStorage.setItem('app-version', getVersion());
+  const version = getVersion();
+  localStorage.setItem('app-version', version);
+  lastVersion = version;
 };
 
 // Force UI refresh
@@ -69,8 +73,8 @@ const forceRefresh = () => {
 const getBuildInfo = () => {
   return {
     version: getVersion(),
-    buildTime: process.env.REACT_APP_BUILD_TIME || new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    buildTime: import.meta.env.VITE_BUILD_TIME || 'unknown',
+    environment: import.meta.env.MODE || 'development',
     cacheBuster: getCacheBuster()
   };
 };

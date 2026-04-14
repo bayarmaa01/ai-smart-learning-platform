@@ -43,7 +43,12 @@ ensure_minikube() {
 build_images() {
   log "Building images into Minikube Docker"
   docker build -t eduai-backend:latest ./backend
-  docker build -t eduai-frontend:latest ./frontend
+  docker build \
+    --build-arg VITE_API_URL="http://localhost:4200/api/v1" \
+    --build-arg VITE_AI_URL="http://localhost:5200" \
+    --build-arg VITE_BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    --build-arg VITE_APP_VERSION="1.0.0" \
+    -t eduai-frontend:latest ./frontend
   ok "Images built"
 }
 
