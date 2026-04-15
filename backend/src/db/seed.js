@@ -1,5 +1,5 @@
 const bcrypt = require('bcryptjs');
-const { query } = require('./connection');
+const { query, connectDB } = require('./connection');
 const { logger } = require('../utils/logger');
 
 class DatabaseSeeder {
@@ -10,6 +10,9 @@ class DatabaseSeeder {
   async seedAll() {
     try {
       logger.info('Starting database seeding...');
+      
+      // Ensure database connection
+      await connectDB();
       
       await this.seedUsers();
       await this.seedCourses();

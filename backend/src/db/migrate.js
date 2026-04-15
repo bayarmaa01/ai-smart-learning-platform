@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { query, getClient } = require('./connection');
+const { query, getClient, connectDB } = require('./connection');
 const { logger } = require('../utils/logger');
 
 class DatabaseMigrator {
@@ -11,6 +11,9 @@ class DatabaseMigrator {
 
   async initialize() {
     try {
+      // Ensure database connection
+      await connectDB();
+      
       // Create migrations table if it doesn't exist
       await query(`
         CREATE TABLE IF NOT EXISTS ${this.migrationsTable} (

@@ -1,0 +1,58 @@
+# =================================
+# SYSTEM VERIFICATION COMMANDS
+# =================================
+
+# 1. KUBERNETES STATUS
+kubectl get pods -n eduai
+kubectl get pods -n monitoring
+kubectl get pods -n eduai-argocd
+
+# 2. DATABASE CHECKS
+kubectl exec -n eduai postgres-74b756c75f-x4mf2 -- psql -U postgres -d eduai -c "SELECT version();"
+kubectl exec -n eduai postgres-74b756c75f-x4mf2 -- psql -U postgres -d eduai -c "\dt"
+kubectl exec -n eduai postgres-74b756c75f-x4mf2 -- psql -U postgres -d eduai -c "SELECT COUNT(*) FROM users;"
+kubectl exec -n eduai postgres-74b756c75f-x4mf2 -- psql -U postgres -d eduai -c "SELECT COUNT(*) FROM courses;"
+
+# 3. BACKEND API CHECKS
+curl -s http://localhost:4200/api/v1/health | jq .
+curl -s -X POST http://localhost:4200/api/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@eduai.com","password":"Admin@1234"}' | jq .
+curl -s http://localhost:4200/api/v1/courses | jq '.courses | length'
+
+# 4. FRONTEND CONNECTION
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3200
+kubectl exec -n eduai frontend-85b558dc7c-mpzm4 -- cat /usr/share/nginx/html/assets/index-*.js | grep -o "localhost:4200\|backend:5000"
+
+# 5. AI INTEGRATION
+curl -s http://localhost:4200/api/v1/ai/health | jq .
+curl -s -X POST http://localhost:4200/api/v1/chat -H "Content-Type: application/json" -d '{"message":"Hello AI"}' | jq .
+
+# 6. SERVICES STATUS
+kubectl get svc -n eduai
+ps aux | grep "kubectl port-forward" | grep -v grep
+
+# 7. RECENT LOGS
+kubectl logs -n eduai deployment/backend --tail=10
+kubectl logs -n eduai deployment/frontend --tail=5
+kubectl logs -n eduai postgres-74b756c75f-x4mf2 --tail=5
+
+# =================================
+# QUICK VERIFICATION (ONE-LINERS)
+# =================================
+
+# All pods status
+kubectl get pods -A | grep -E "eduai|monitoring"
+
+# Database connection
+kubectl exec -n eduai postgres-74b756c75f-x4mf2 -- psql -U postgres -d eduai -c "SELECT 'DB_OK';"
+
+# API health
+curl -s http://localhost:4200/api/v1/health | jq -r '.status'
+
+# Login test
+curl -s -X POST http://localhost:4200/api/v1/auth/login -H "Content-Type: application/json" -d '{"email":"admin@eduai.com","password":"Admin@1234"}' | jq -r '.success'
+
+# AI test
+curl -s -X POST http://localhost:4200/api/v1/chat -H "Content-Type: application/json" -d '{"message":"test"}' | jq -r '.success'
+
+# Frontend test
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3200

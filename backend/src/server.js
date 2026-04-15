@@ -18,6 +18,8 @@ const { setupMetrics } = require('./monitoring/metrics');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { resolveTenant } = require('./middleware/tenantMiddleware');
 const { logger } = require('./utils/logger');
+const { runMigrations } = require('./db/migrate');
+const { seedDatabase } = require('./db/seed');
 const routes = require('./routes');
 const aiRoutes = require('./routes/ai.routes');
 const chatRoutes = require('./routes/chat');
@@ -122,7 +124,22 @@ const PORT = process.env.PORT || 5000;
 
 async function start() {
   try {
+    // Connect to database
     await connectDB();
+    
+    // Run migrations automatically
+    logger.info('Running database migrations...');
+    await runMigrations();
+    logger.info('Migrations completed');
+    
+    // Seed database if needed
+    if (process.env.NODE_ENV !== 'production' || process.env.AUTO_SEED === 'true') {
+      logger.info('Seeding database...');
+      await seedDatabase();
+      logger.info('Database seeding completed');
+    }
+    
+    // Connect to Redis
     await connectRedis();
 
     server.listen(PORT, () => {
