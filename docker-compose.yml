@@ -54,7 +54,7 @@ services:
     image: ollama/ollama:latest
     container_name: eduai-ollama
     ports:
-      - "11434:11434"
+      - "11435:11434"
     volumes:
       - ollama_data:/root/.ollama
     networks:
@@ -87,7 +87,7 @@ services:
       DB_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: http://ollama:11435
       OLLAMA_MODEL: gemma4:31b-cloud
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       FRONTEND_URL: http://localhost:3200
