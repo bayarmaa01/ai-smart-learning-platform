@@ -5,11 +5,11 @@ const API_CONFIG = {
     timeout: 30000
   },
   production: {
-    baseURL: 'http://backend:5000/api/v1',
+    baseURL: 'http://localhost:4200/api/v1',
     timeout: 30000
   },
   kubernetes: {
-    baseURL: 'http://backend:5000/api/v1',
+    baseURL: 'http://localhost:4200/api/v1',
     timeout: 30000
   }
 };
