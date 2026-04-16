@@ -1,12 +1,9 @@
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { getApiConfig } from '../config/api';
-
-const config = getApiConfig();
 
 const api = axios.create({
-  baseURL: config.baseURL,
-  timeout: config.timeout,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4200/api/v1',
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -18,10 +15,6 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    const tenantId = localStorage.getItem('tenantId');
-    if (tenantId) {
-      config.headers['X-Tenant-ID'] = tenantId;
-    }
     return config;
   },
   (error) => {
@@ -31,12 +24,36 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('tenantId');
-      window.location.href = '/login';
+      // Try to refresh token
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        try {
+          const response = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {
+            refreshToken
+          });
+          
+          if (response.data.success) {
+            localStorage.setItem('accessToken', response.data.data.accessToken);
+            // Retry the original request
+            error.config.headers.Authorization = `Bearer ${response.data.data.accessToken}`;
+            return api.request(error.config);
+          }
+        } catch (refreshError) {
+          // Refresh failed, logout
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+        }
+      } else {
+        // No refresh token, logout
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+      }
     }
+    
     const message = error.response?.data?.error?.message || error.message;
     toast.error(message);
     return Promise.reject(error);

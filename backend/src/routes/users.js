@@ -1,204 +1,262 @@
 const express = require('express');
+const { verifyToken, authorizeRoles } = require('../middleware/auth');
+const { query } = require('../config/database');
+const logger = require('../utils/logger');
+
 const router = express.Router();
-const bcrypt = require('bcryptjs');
-const { verifyToken } = require('../middleware/auth');
-const { query } = require('../db/connection');
-const { deleteCache, getCache, setCache } = require('../cache/redis');
-const { AppError } = require('../middleware/errorHandler');
 
+// Get user profile
 router.get('/profile', verifyToken, async (req, res) => {
-  const result = await query(
-    `SELECT id, email, first_name, last_name, role, avatar_url, bio, language_preference,
-            is_email_verified, created_at,
-            (SELECT COUNT(*) FROM enrollments WHERE user_id = $1) AS enrolled_courses,
-            (SELECT COUNT(*) FROM enrollments WHERE user_id = $1 AND completed_at IS NOT NULL) AS completed_courses
-     FROM users WHERE id = $1`,
-    [req.user.id]
-  );
-  res.json({ success: true, user: result.rows[0] });
-});
+  try {
+    const userId = req.user.userId;
+    
+    const result = await query(`
+      SELECT id, email, first_name, last_name, role, avatar_url, bio, language_preference,
+             is_email_verified, created_at,
+             (SELECT COUNT(*) FROM enrollments WHERE student_id = $1) AS enrolled_courses,
+             (SELECT COUNT(*) FROM enrollments WHERE student_id = $1 AND completed_at IS NOT NULL) AS completed_courses,
+             (SELECT COALESCE(SUM(time_spent_minutes), 0) FROM progress WHERE student_id = $1) / 60.0 AS total_hours
+      FROM users WHERE id = $1
+    `, [userId]);
 
-router.patch('/profile', verifyToken, async (req, res) => {
-  const { firstName, lastName, bio, languagePreference, avatarUrl } = req.body;
-  const updates = [];
-  const values = [];
-
-  if (firstName !== undefined) { values.push(firstName); updates.push(`first_name = $${values.length}`); }
-  if (lastName !== undefined) { values.push(lastName); updates.push(`last_name = $${values.length}`); }
-  if (bio !== undefined) { values.push(bio); updates.push(`bio = $${values.length}`); }
-  if (languagePreference) { values.push(languagePreference); updates.push(`language_preference = $${values.length}`); }
-  if (avatarUrl) { values.push(avatarUrl); updates.push(`avatar_url = $${values.length}`); }
-
-  if (!updates.length) throw new AppError('No fields to update', 400);
-
-  values.push(req.user.id);
-  const result = await query(
-    `UPDATE users SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${values.length}
-     RETURNING id, email, first_name, last_name, bio, language_preference, avatar_url`,
-    values
-  );
-
-  await deleteCache(`user:${req.user.id}`);
-  res.json({ success: true, user: result.rows[0] });
-});
-
-router.patch('/password', verifyToken, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) throw new AppError('Both passwords required', 400);
-  if (newPassword.length < 8) throw new AppError('Password must be at least 8 characters', 400);
-
-  const result = await query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
-  const valid = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
-  if (!valid) throw new AppError('Current password is incorrect', 401);
-
-  const hash = await bcrypt.hash(newPassword, 12);
-  await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [hash, req.user.id]);
-  await deleteCache(`user:${req.user.id}`);
-  res.json({ success: true, message: 'Password changed successfully' });
-});
-
-router.get('/stats', verifyToken, async (req, res) => {
-  const cacheKey = `user:stats:${req.user.id}`;
-  const cached = await getCache(cacheKey);
-  if (cached) return res.json({ success: true, stats: cached });
-
-  const [enrollRes, certRes, hoursRes, streakRes] = await Promise.all([
-    query('SELECT COUNT(*) as total, COUNT(completed_at) as completed FROM enrollments WHERE user_id = $1', [req.user.id]),
-    query('SELECT COUNT(*) as total FROM enrollments WHERE user_id = $1 AND completed_at IS NOT NULL', [req.user.id]),
-    query(`SELECT COALESCE(SUM(lp.watch_time_seconds), 0) / 3600.0 AS total_hours
-           FROM lesson_progress lp
-           JOIN lessons l ON lp.lesson_id = l.id
-           WHERE lp.user_id = $1`, [req.user.id]),
-    query(`SELECT COUNT(DISTINCT DATE(created_at)) AS streak
-           FROM lesson_progress
-           WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '30 days'`, [req.user.id]),
-  ]);
-
-  const enrolled = parseInt(enrollRes.rows[0]?.total || 0);
-  const completed = parseInt(enrollRes.rows[0]?.completed || 0);
-  const totalHours = parseFloat(hoursRes.rows[0]?.total_hours || 0);
-  const certificates = parseInt(certRes.rows[0]?.total || 0);
-  const completionRate = enrolled > 0 ? Math.round((completed / enrolled) * 100) : 0;
-  const streak = parseInt(streakRes.rows[0]?.streak || 0);
-
-  const stats = {
-    enrolledCourses: enrolled,
-    completedCourses: completed,
-    certificates,
-    totalHours: Math.round(totalHours * 10) / 10,
-    completionRate,
-    streak,
-    weeklyGoalHours: 10,
-    weeklyCompletedHours: Math.min(totalHours, 10),
-    points: completed * 100 + Math.round(totalHours) * 10,
-  };
-
-  await setCache(cacheKey, stats, 300);
-  res.json({ success: true, stats });
-});
-
-router.get('/activity/weekly', verifyToken, async (req, res) => {
-  const result = await query(
-    `SELECT TO_CHAR(DATE(created_at), 'Dy') AS day,
-            COALESCE(SUM(watch_time_seconds), 0) / 3600.0 AS hours
-     FROM lesson_progress
-     WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '7 days'
-     GROUP BY DATE(created_at), TO_CHAR(DATE(created_at), 'Dy')
-     ORDER BY DATE(created_at)`,
-    [req.user.id]
-  );
-
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const dataMap = {};
-  result.rows.forEach((r) => { dataMap[r.day] = parseFloat(r.hours); });
-  const weekly = days.map((day) => ({ day, hours: Math.round((dataMap[day] || 0) * 10) / 10 }));
-
-  res.json({ success: true, weekly });
-});
-
-router.get('/progress', verifyToken, async (req, res) => {
-  const [enrollRes, monthlyRes] = await Promise.all([
-    query(
-      `SELECT e.id, c.title, e.progress_percentage, e.completed_at,
-              cat.name AS category_name
-       FROM enrollments e
-       JOIN courses c ON e.course_id = c.id
-       LEFT JOIN categories cat ON c.category_id = cat.id
-       WHERE e.user_id = $1
-       ORDER BY e.updated_at DESC`,
-      [req.user.id]
-    ),
-    query(
-      `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon') AS month,
-              COALESCE(SUM(watch_time_seconds), 0) / 3600.0 AS hours
-       FROM lesson_progress
-       WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '6 months'
-       GROUP BY DATE_TRUNC('month', created_at)
-       ORDER BY DATE_TRUNC('month', created_at)`,
-      [req.user.id]
-    ),
-  ]);
-
-  const completed = enrollRes.rows.filter((e) => e.completed_at).length;
-  const totalHoursRes = await query(
-    `SELECT COALESCE(SUM(watch_time_seconds), 0) / 3600.0 AS total FROM lesson_progress WHERE user_id = $1`,
-    [req.user.id]
-  );
-
-  const categoryMap = {};
-  enrollRes.rows.forEach((e) => {
-    if (e.category_name) {
-      categoryMap[e.category_name] = (categoryMap[e.category_name] || 0) + 1;
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
     }
-  });
-  const categories = Object.entries(categoryMap).map(([name, value]) => ({ name, value }));
 
-  res.json({
-    success: true,
-    completedCourses: completed,
-    totalHours: parseFloat(totalHoursRes.rows[0]?.total || 0),
-    certificates: completed,
-    avgScore: 85,
-    monthly: monthlyRes.rows.map((r) => ({ month: r.month, hours: Math.round(parseFloat(r.hours) * 10) / 10 })),
-    categories,
-    enrolledCourses: enrollRes.rows,
-  });
+    const user = result.rows[0];
+    const stats = {
+      enrolledCourses: parseInt(user.enrolled_courses) || 0,
+      completedCourses: parseInt(user.completed_courses) || 0,
+      totalHours: parseFloat(user.total_hours) || 0,
+      certificates: parseInt(user.completed_courses) || 0
+    };
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role,
+        avatarUrl: user.avatar_url,
+        bio: user.bio || '',
+        languagePreference: user.language_preference || 'en',
+        isEmailVerified: user.is_email_verified,
+        createdAt: user.created_at
+      },
+      stats
+    });
+  } catch (error) {
+    logger.error('Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch profile'
+      }
+    });
+  }
 });
 
-router.get('/certificates', verifyToken, async (req, res) => {
-  const result = await query(
-    `SELECT e.id, c.title AS course_title, e.completed_at AS issued_at,
-            'EduAI Platform' AS issuer,
-            UPPER(CONCAT('CERT-', SUBSTRING(e.id::text, 1, 8))) AS credential_id
-     FROM enrollments e
-     JOIN courses c ON e.course_id = c.id
-     WHERE e.user_id = $1 AND e.completed_at IS NOT NULL
-     ORDER BY e.completed_at DESC`,
-    [req.user.id]
-  );
-  res.json({ success: true, certificates: result.rows });
+// Update user profile
+router.put('/profile', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { firstName, lastName, bio, languagePreference, avatarUrl } = req.body;
+    
+    const result = await query(`
+      UPDATE users 
+      SET first_name = $2, last_name = $3, bio = $4, language_preference = $5, avatar_url = $6, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, email, first_name, last_name, bio, language_preference, avatar_url
+    `, [userId, firstName, lastName, bio, languagePreference, avatarUrl]);
+
+    res.json({
+      success: true,
+      user: result.rows[0]
+    });
+  } catch (error) {
+    logger.error('Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to update profile'
+      }
+    });
+  }
 });
 
-router.get('/certificates/:id/download', verifyToken, async (req, res) => {
-  res.status(501).json({ success: false, error: { message: 'PDF generation not yet configured' } });
+// Get user stats
+router.get('/stats', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM enrollments WHERE student_id = $1) AS enrolled_courses,
+        (SELECT COUNT(*) FROM enrollments WHERE student_id = $1 AND completed_at IS NOT NULL) AS completed_courses,
+        (SELECT COALESCE(SUM(time_spent_minutes), 0) FROM progress WHERE student_id = $1) / 60.0 AS total_hours,
+        (SELECT COUNT(*) FROM enrollments WHERE student_id = $1 AND completed_at IS NOT NULL) AS certificates
+    `, [userId]);
+
+    const stats = {
+      enrolledCourses: parseInt(result.rows[0].enrolled_courses) || 0,
+      completedCourses: parseInt(result.rows[0].completed_courses) || 0,
+      totalHours: parseFloat(result.rows[0].total_hours) || 0,
+      certificates: parseInt(result.rows[0].certificates) || 0
+    };
+
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error) {
+    logger.error('Get stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch stats'
+      }
+    });
+  }
 });
 
-router.post('/placement-result', verifyToken, async (req, res) => {
-  const { level } = req.body;
-  await query(
-    `UPDATE users SET placement_level = $1, updated_at = NOW() WHERE id = $2`,
-    [level, req.user.id]
-  ).catch(() => null);
-  await deleteCache(`user:${req.user.id}`);
-  res.json({ success: true, message: 'Placement result saved', level });
+// Admin: Get all users
+router.get('/all', verifyToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT id, email, first_name, last_name, role, is_active, is_email_verified, created_at
+      FROM users
+      ORDER BY created_at DESC
+    `);
+
+    res.json({
+      success: true,
+      users: result.rows
+    });
+  } catch (error) {
+    logger.error('Get all users error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch users'
+      }
+    });
+  }
 });
 
-router.patch('/notification-preferences', verifyToken, async (req, res) => {
-  res.json({ success: true, message: 'Notification preferences saved' });
+// Teacher: Get students
+router.get('/students', verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.created_at,
+             e.enrolled_at, e.progress_percentage
+      FROM users u
+      JOIN enrollments e ON u.id = e.student_id
+      JOIN courses c ON e.course_id = c.id
+      WHERE c.instructor_id = $1
+      ORDER BY e.enrolled_at DESC
+    `, [req.user.userId]);
+
+    res.json({
+      success: true,
+      students: result.rows
+    });
+  } catch (error) {
+    logger.error('Get students error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch students'
+      }
+    });
+  }
 });
 
-router.post('/courses/:courseId/notes', verifyToken, async (req, res) => {
-  res.json({ success: true, message: 'Note saved' });
+// Admin: Get admin stats
+router.get('/admin-stats', verifyToken, authorizeRoles('admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM users) AS total_users,
+        (SELECT COUNT(*) FROM courses) AS total_courses,
+        (SELECT COUNT(*) FROM enrollments) AS total_enrollments,
+        (SELECT COUNT(*) FROM users WHERE is_active = true) AS active_users,
+        COALESCE(SUM(c.price), 0) AS total_revenue
+      FROM courses c
+      JOIN enrollments e ON c.id = e.course_id
+      WHERE c.is_free = false
+    `);
+
+    const stats = {
+      totalUsers: parseInt(result.rows[0].total_users) || 0,
+      totalCourses: parseInt(result.rows[0].total_courses) || 0,
+      totalRevenue: parseFloat(result.rows[0].total_revenue) || 0,
+      activeUsers: parseInt(result.rows[0].active_users) || 0
+    };
+
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error) {
+    logger.error('Get admin stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch admin stats'
+      }
+    });
+  }
+});
+
+// Teacher: Get teacher stats
+router.get('/teacher-stats', verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        (SELECT COUNT(*) FROM courses WHERE instructor_id = $1) AS total_courses,
+        (SELECT COUNT(DISTINCT e.student_id) FROM enrollments e
+         JOIN courses c ON e.course_id = c.id WHERE c.instructor_id = $1) AS total_students,
+        COALESCE(SUM(c.price), 0) AS total_revenue,
+        COALESCE(AVG(c.rating_average), 0) AS avg_rating
+      FROM courses c
+      WHERE c.instructor_id = $1
+    `, [req.user.userId]);
+
+    const stats = {
+      totalCourses: parseInt(result.rows[0].total_courses) || 0,
+      totalStudents: parseInt(result.rows[0].total_students) || 0,
+      totalRevenue: parseFloat(result.rows[0].total_revenue) || 0,
+      avgRating: parseFloat(result.rows[0].avg_rating) || 0
+    };
+
+    res.json({
+      success: true,
+      stats
+    });
+  } catch (error) {
+    logger.error('Get teacher stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch teacher stats'
+      }
+    });
+  }
 });
 
 module.exports = router;

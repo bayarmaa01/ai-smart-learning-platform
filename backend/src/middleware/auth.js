@@ -1,93 +1,91 @@
 const jwt = require('jsonwebtoken');
-const { query } = require('../db/connection');
-const { getCache, setCache } = require('../cache/redis');
-const { AppError } = require('./errorHandler');
+const { query } = require('../config/database');
+const logger = require('../utils/logger');
 
-const normalizeRole = (role) => {
-  if (role === 'teacher') return 'instructor';
-  return role;
-};
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
 const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AppError('No token provided', 401, 'UNAUTHORIZED');
+    
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'NO_TOKEN',
+          message: 'Access token is required'
+        }
+      });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authHeader.split(' ')[1]; // Bearer TOKEN
 
-    const cacheKey = `blacklist:${token}`;
-    const isBlacklisted = await getCache(cacheKey);
-    if (isBlacklisted) {
-      throw new AppError('Token has been revoked', 401, 'TOKEN_REVOKED');
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN_FORMAT',
+          message: 'Invalid token format'
+        }
+      });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
 
-    const cacheUserKey = `user:${decoded.userId}`;
-    let user = await getCache(cacheUserKey);
-
-    if (!user) {
-      const result = await query(
-        'SELECT id, email, first_name, last_name, role, tenant_id, is_active, language_preference FROM users WHERE id = $1',
-        [decoded.userId]
-      );
-
-      if (!result.rows.length) {
-        throw new AppError('User not found', 401, 'USER_NOT_FOUND');
-      }
-
-      user = result.rows[0];
-      user.role = normalizeRole(user.role);
-      await setCache(cacheUserKey, user, 300);
+    // Optional: Verify user still exists and is active
+    const userResult = await query('SELECT id, role, is_active FROM users WHERE id = $1', [decoded.userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
     }
 
+    const user = userResult.rows[0];
     if (!user.is_active) {
-      throw new AppError('Account is deactivated', 401, 'ACCOUNT_DEACTIVATED');
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'ACCOUNT_DISABLED',
+          message: 'Account is disabled'
+        }
+      });
     }
 
-    req.user = user;
-    req.tenantId = req.headers['x-tenant-id'] || user.tenant_id;
+    req.userRole = user.role;
     next();
-  } catch (err) {
-    if (err.name === 'JsonWebTokenError') {
-      return next(new AppError('Invalid token', 401, 'INVALID_TOKEN'));
-    }
-    if (err.name === 'TokenExpiredError') {
-      return next(new AppError('Token expired', 401, 'TOKEN_EXPIRED'));
-    }
-    next(err);
+  } catch (error) {
+    logger.error('Token verification error:', error);
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'INVALID_TOKEN',
+        message: 'Invalid or expired token'
+      }
+    });
   }
 };
 
-const authorize = (...roles) => {
-  const normalizedRoles = roles.map(normalizeRole);
+const authorizeRoles = (...roles) => {
   return (req, res, next) => {
-    if (!req.user) {
-      return next(new AppError('Authentication required', 401, 'UNAUTHORIZED'));
-    }
-    if (!normalizedRoles.includes(normalizeRole(req.user.role))) {
-      return next(new AppError('Insufficient permissions', 403, 'FORBIDDEN'));
+    if (!req.userRole || !roles.includes(req.userRole)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Insufficient permissions'
+        }
+      });
     }
     next();
   };
 };
 
-const optionalAuth = async (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
-    }
-    await verifyToken(req, res, next);
-  } catch (error) {
-    return next();
-  }
+module.exports = {
+  verifyToken,
+  authorizeRoles
 };
-
-const authMiddleware = async (req, res, next) => {
-  await verifyToken(req, res, next);
-};
-
-module.exports = { verifyToken, authorize, optionalAuth, authMiddleware };

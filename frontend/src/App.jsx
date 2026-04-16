@@ -1,117 +1,147 @@
-import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
-import { fetchCurrentUser } from './store/slices/authSlice';
-import ErrorBoundary from './components/common/ErrorBoundary';
-import { useAutoRefresh } from './hooks/useAutoRefresh';
-import AutoRefreshIndicator from './components/AutoRefreshIndicator';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
 
-import DashboardLayout from './layouts/DashboardLayout';
-import AuthLayout from './layouts/AuthLayout';
-import ProtectedRoute from './components/common/ProtectedRoute';
-import RoleGuard from './components/common/RoleGuard';
-import LoadingScreen from './components/common/LoadingScreen';
+// Components
+import Navbar from './components/Navbar';
+import Sidebar from './components/Sidebar';
+import LoadingSpinner from './components/LoadingSpinner';
 
-import LoginPage from './pages/auth/Login';
-import RegisterPage from './pages/auth/Register';
-import ForgotPasswordPage from './pages/auth/ForgotPassword';
+// Pages
+import StudentDashboard from './pages/StudentDashboard';
+import TeacherDashboard from './pages/TeacherDashboard';
+import AdminDashboard from './pages/AdminDashboard';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Courses from './pages/Courses';
+import CourseDetail from './pages/CourseDetail';
+import Profile from './pages/Profile';
 
-import StudentDashboard from './pages/student/Dashboard';
-import CoursesPage from './pages/student/Courses';
-import CourseDetailPage from './pages/student/CourseDetail';
-import PlayerPage from './pages/student/Player';
-import PlacementTestPage from './pages/student/PlacementTest';
-import ProgressPage from './pages/student/Progress';
-import CertificatesPage from './pages/student/Certificates';
-import SubscriptionPage from './pages/student/Subscription';
+// Services
+import { authService } from './services/authService';
+import api from './services/api';
 
-import InstructorDashboard from './pages/instructor/Dashboard';
-import InstructorCourses from './pages/instructor/Courses';
-import CreateCourse from './pages/instructor/CreateCourse';
-import InstructorStudents from './pages/instructor/Students';
-import InstructorAnalytics from './pages/instructor/Analytics';
+// Create a client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminUsers from './pages/admin/AdminUsers';
-import AdminCourses from './pages/admin/AdminCourses';
-import AdminAnalytics from './pages/admin/AdminAnalytics';
-import AdminSettings from './pages/admin/AdminSettings';
-
-import AIChatPage from './pages/ai/AIChat';
-import ProfilePage from './pages/student/Profile';
-import SettingsPage from './pages/student/Settings';
-import NotFoundPage from './pages/NotFound';
-
-export default function App() {
-  const dispatch = useDispatch();
-  const { isInitialized } = useSelector((state) => state.auth);
-  const { version, isChecking, forceRefresh } = useAutoRefresh(5000);
+function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    // Check authentication status on mount
     const token = localStorage.getItem('accessToken');
     if (token) {
-      dispatch(fetchCurrentUser());
-    } else {
-      dispatch({ type: 'auth/fetchCurrentUser/rejected' });
+      try {
+        const userData = authService.getCurrentUser();
+        setUser(userData);
+      } catch (error) {
+        console.error('Failed to restore user session:', error);
+        localStorage.removeItem('accessToken');
+      }
     }
-  }, [dispatch]);
+    setLoading(false);
+  }, []);
 
-  if (!isInitialized) {
-    return <LoadingScreen />;
+  const handleLogout = () => {
+    authService.logout();
+    setUser(null);
+  };
+
+  const ProtectedRoute = ({ children }) => {
+    if (!user) {
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="large" />
+      </div>
+    );
   }
 
   return (
-    <ErrorBoundary>
-      <AutoRefreshIndicator 
-        isChecking={isChecking} 
-        version={version} 
-        onForceRefresh={forceRefresh} 
-      />
-      <Routes>
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        </Route>
-
-        <Route element={<ProtectedRoute />}>
-          <Route element={<DashboardLayout />}>
-            {/* Student Routes */}
-            <Route path="/dashboard" element={<StudentDashboard />} />
-            <Route path="/courses" element={<CoursesPage />} />
-            <Route path="/courses/:id" element={<CourseDetailPage />} />
-            <Route path="/courses/:id/learn" element={<PlayerPage />} />
-            <Route path="/placement-test" element={<PlacementTestPage />} />
-            <Route path="/progress" element={<ProgressPage />} />
-            <Route path="/certificates" element={<CertificatesPage />} />
-            <Route path="/subscription" element={<SubscriptionPage />} />
-
-            {/* Instructor Routes */}
-            <Route path="/instructor/dashboard" element={<InstructorDashboard />} />
-            <Route path="/instructor/courses" element={<InstructorCourses />} />
-            <Route path="/instructor/create-course" element={<CreateCourse />} />
-            <Route path="/instructor/students" element={<InstructorStudents />} />
-            <Route path="/instructor/analytics" element={<InstructorAnalytics />} />
-
-            {/* Shared Routes */}
-            <Route path="/ai-chat" element={<AIChatPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-
-            {/* Admin Routes */}
-            <Route element={<RoleGuard roles={['admin', 'super_admin']} />}>
-              <Route path="/admin" element={<AdminDashboard />} />
-              <Route path="/admin/users" element={<AdminUsers />} />
-              <Route path="/admin/courses" element={<AdminCourses />} />
-              <Route path="/admin/analytics" element={<AdminAnalytics />} />
-              <Route path="/admin/settings" element={<AdminSettings />} />
-            </Route>
-          </Route>
-        </Route>
-
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <Router>
+        <div className="min-h-screen bg-gray-50">
+          <Navbar user={user} onLogout={handleLogout} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+          
+          <div className="flex">
+            <Sidebar isOpen={sidebarOpen} userRole={user?.role} />
+            
+            <main className="flex-1">
+              <Routes>
+                <Route path="/login" element={<Login setUser={setUser} />} />
+                <Route path="/register" element={<Register setUser={setUser} />} />
+                
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                
+                <Route path="/dashboard" element={
+                  <ProtectedRoute>
+                    <StudentDashboard user={user} />
+                  </ProtectedRoute>
+                } />
+                
+                <Route path="/teacher" element={
+                  <ProtectedRoute>
+                    <TeacherDashboard user={user} />
+                  </ProtectedRoute>
+                } />
+                
+                <Route path="/admin" element={
+                  <ProtectedRoute>
+                    <AdminDashboard user={user} />
+                  </ProtectedRoute>
+                } />
+                
+                <Route path="/courses" element={
+                  <ProtectedRoute>
+                    <Courses user={user} />
+                  </ProtectedRoute>
+                } />
+                
+                <Route path="/courses/:id" element={
+                  <ProtectedRoute>
+                    <CourseDetail user={user} />
+                  </ProtectedRoute>
+                } />
+                
+                <Route path="/profile" element={
+                  <ProtectedRoute>
+                    <Profile user={user} />
+                  </ProtectedRoute>
+                } />
+              </Routes>
+            </main>
+          </div>
+        </div>
+        
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+          }}
+        />
+      </div>
+    </Router>
+    </QueryClientProvider>
   );
 }
+
+export default App;
