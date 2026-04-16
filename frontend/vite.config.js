@@ -38,10 +38,10 @@ export default defineConfig({
     sourcemap: false,
     rollupOptions: {
       output: {
-        // Add version to asset filenames for cache busting
-        assetFileNames: `assets/[name]-${getVersion()}-[hash][extname]`,
-        chunkFileNames: `js/[name]-${getVersion()}-[hash].js`,
-        entryFileNames: `js/[name]-${getVersion()}-[hash].js`,
+        // Use shorter filenames to avoid ENAMETOOLONG errors
+        assetFileNames: `assets/[name]-[hash][extname]`,
+        chunkFileNames: `js/[name]-[hash].js`,
+        entryFileNames: `js/[name]-[hash].js`,
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           redux: ['@reduxjs/toolkit', 'react-redux'],
