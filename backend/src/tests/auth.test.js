@@ -98,7 +98,6 @@ describe('Auth API', () => {
 
     it('should reject duplicate email registration', async () => {
       const mockQuery = jest.fn();
-      mockTenantQuery(mockQuery);
       query.mockImplementation(mockQuery);
       
       // Mock existing user check
@@ -108,7 +107,6 @@ describe('Auth API', () => {
 
       const res = await request(app)
         .post('/api/v1/auth/register')
-        .set('X-Tenant-ID', 'default')
         .send({
           email: 'existing@example.com',
           password: 'SecurePass123!',
@@ -116,7 +114,7 @@ describe('Auth API', () => {
           lastName: 'User',
         });
 
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(409);
     });
   });
 
@@ -200,13 +198,12 @@ describe('Auth API', () => {
     it('should return user profile with valid token', async () => {
       const jwt = require('jsonwebtoken');
       const token = jwt.sign(
-        { userId: 'test-uuid', role: 'student', tenantId: 'default' },
+        { userId: 'test-uuid', role: 'student' },
         process.env.JWT_SECRET || 'test-secret',
         { expiresIn: '15m' }
       );
 
       const mockQuery = jest.fn();
-      mockTenantQuery(mockQuery);
       query.mockImplementation(mockQuery);
       
       mockQuery.mockResolvedValueOnce({
@@ -216,7 +213,6 @@ describe('Auth API', () => {
           first_name: 'Test',
           last_name: 'User',
           role: 'student',
-          tenant_id: 'default-tenant',
         }],
       });
 
@@ -224,10 +220,9 @@ describe('Auth API', () => {
 
       const res = await request(app)
         .get('/api/v1/auth/me')
-        .set('Authorization', `Bearer ${token}`)
-        .set('X-Tenant-ID', 'default');
+        .set('Authorization', `Bearer ${token}`);
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
     });
 
     it('should reject request without token', async () => {
