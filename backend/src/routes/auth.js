@@ -1,8 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const logger = require('../utils/logger');
 const { verifyToken } = require('../middleware/auth');
-const { register, login, logout, refreshToken, getMe, forgotPassword, resetPassword, verifyEmail } = require('../controllers/authController');
+const { register, login, refreshToken, getMe } = require('../controllers/authController');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';

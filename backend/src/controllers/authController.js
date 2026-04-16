@@ -96,8 +96,8 @@ const register = async (req, res) => {
   );
 
   // Send welcome + verification emails (non-blocking)
-  sendWelcomeEmail(email, firstName).catch((err) => {});
-  sendVerificationEmail(email, firstName, verificationToken).catch((err) => {});
+  sendWelcomeEmail(email, firstName).catch(() => {});
+  sendVerificationEmail(email, firstName, verificationToken).catch(() => {});
 
   res.status(201).json({
     success: true,
@@ -118,8 +118,7 @@ const register = async (req, res) => {
 };
 
 const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
   const lockKey = `login:lock:${email}`;
   const isLocked = await getCache(lockKey);
@@ -248,8 +247,7 @@ const refreshToken = async (req, res) => {
 };
 
 const getMe = async (req, res) => {
-  try {
-    const result = await query(
+  const result = await query(
     `SELECT id, email, first_name, last_name, role, tenant_id, avatar_url, bio,
             language_preference, is_email_verified, created_at, last_login_at
      FROM users WHERE id = $1`,
@@ -274,9 +272,6 @@ const getMe = async (req, res) => {
       lastLoginAt: user.last_login_at,
     },
   });
-  } catch (error) {
-    throw error;
-  }
 };
 
 const forgotPassword = async (req, res) => {
@@ -296,7 +291,7 @@ const forgotPassword = async (req, res) => {
     const userResult = await query('SELECT first_name FROM users WHERE id = $1', [result.rows[0].id]);
     const firstName = userResult.rows[0]?.first_name || 'User';
 
-    sendPasswordResetEmail(email, resetToken, firstName).catch((err) => {});
+    sendPasswordResetEmail(email, resetToken, firstName).catch(() => {});
   }
 
   res.json({ success: true, message: 'If the email exists, a reset link has been sent.' });

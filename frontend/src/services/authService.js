@@ -18,7 +18,6 @@ export const authService = {
         lastName: decoded.lastName || 'User'
       };
     } catch (error) {
-      console.error('Failed to decode token:', error);
       return null;
     }
   },

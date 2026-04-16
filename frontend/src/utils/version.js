@@ -31,19 +31,6 @@ const addVersionToUrl = (url) => {
   return `${url}${separator}v=${getVersion()}`;
 };
 
-// Auto-reload detection - DISABLED to prevent constant refreshes
-let lastVersion = null;
-const checkForUpdates = () => {
-  // DISABLED: Auto-versioning causing constant page refreshes
-  return;
-};
-
-// Initialize version checking - DISABLED to prevent constant refreshes
-const initVersionChecking = (intervalMs = 5000) => {
-  // DISABLED: Auto-versioning causing constant page refreshes
-  return;
-};
-
 // Force UI refresh
 const forceRefresh = () => {
   const timestamp = Date.now();

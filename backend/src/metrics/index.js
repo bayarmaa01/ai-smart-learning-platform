@@ -62,7 +62,6 @@ const collectSystemMetrics = async () => {
     // Redis metrics
     const redis = getRedis();
     const redisInfo = await redis.info();
-    const usedMemory = redisInfo.match(/used_memory_human:(.*)/);
     const connectedClients = redisInfo.match(/connected_clients:(.*)/);
     
     if (connectedClients) {
