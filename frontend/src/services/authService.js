@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import { jwtDecode } from 'jwt-decode';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4200/api/v1';
 
@@ -9,7 +9,7 @@ export const authService = {
     if (!token) return null;
     
     try {
-      const decoded = jwt.decode(token);
+      const decoded = jwtDecode(token);
       return {
         id: decoded.userId,
         email: decoded.email,
@@ -28,7 +28,7 @@ export const authService = {
     if (!token) return false;
     
     try {
-      const decoded = jwt.decode(token);
+      const decoded = jwtDecode(token);
       const now = Date.now() / 1000;
       return decoded.exp > now;
     } catch (error) {

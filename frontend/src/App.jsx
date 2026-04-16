@@ -9,7 +9,7 @@ import Sidebar from './components/Sidebar';
 import LoadingSpinner from './components/LoadingSpinner';
 
 // Pages
-import StudentDashboard from './pages/StudentDashboard';
+import StudentDashboard from './pages/student/Dashboard';
 import TeacherDashboard from './pages/TeacherDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import Login from './pages/Login';
@@ -138,8 +138,7 @@ function App() {
             },
           }}
         />
-      </div>
-    </Router>
+      </Router>
     </QueryClientProvider>
   );
 }
