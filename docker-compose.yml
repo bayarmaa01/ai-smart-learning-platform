@@ -64,7 +64,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 10
-    entrypoint: ["/bin/sh", "-c", "ollama pull gemma:2b && ollama serve"]
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull gemma:2b"]
     pull_policy: always
     restart: unless-stopped
 
