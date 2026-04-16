@@ -184,8 +184,8 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     UNIQUE(user_id, plan_id)
 );
 
--- Create indexes (only on tables that have tenant_id and exist)
-CREATE INDEX IF NOT EXISTS idx_users_tenant_email ON users(tenant_id, email);
+-- Create indexes (only basic indexes without tenant_id)
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
 CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category_id);
