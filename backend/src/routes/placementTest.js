@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PlacementTestController = require('../controllers/placementTestController');
-const { authMiddleware } = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
 const { body } = require('express-validator');
 const { validate } = require('../middleware/validate');
 
@@ -10,7 +10,7 @@ router.get('/', PlacementTestController.getPlacementTests);
 router.get('/:id', PlacementTestController.getPlacementTest);
 
 // Protected routes
-router.use(authMiddleware);
+router.use(verifyToken);
 
 router.post('/:id/submit', [
   body('answers').isArray().withMessage('Answers must be an array'),

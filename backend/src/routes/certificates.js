@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const CertificateController = require('../controllers/certificateController');
-const { authMiddleware } = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
 
 // Protected routes
-router.use(authMiddleware);
+router.use(verifyToken);
 
 router.post('/course/:courseId/generate', CertificateController.generateCertificate);
 router.get('/my', CertificateController.getUserCertificates);

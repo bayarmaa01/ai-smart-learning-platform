@@ -85,7 +85,13 @@ const authorizeRoles = (...roles) => {
   };
 };
 
+// Legacy authorize function for backward compatibility
+const authorize = (...roles) => {
+  return authorizeRoles(...roles);
+};
+
 module.exports = {
   verifyToken,
-  authorizeRoles
+  authorizeRoles,
+  authorize
 };

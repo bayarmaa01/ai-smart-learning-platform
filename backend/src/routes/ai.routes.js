@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const AIController = require('../controllers/ai.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
 const rateLimiter = require('../middleware/rateLimiter');
 
 /**
@@ -10,7 +10,7 @@ const rateLimiter = require('../middleware/rateLimiter');
  */
 
 // Apply authentication and rate limiting to all AI routes
-router.use(authMiddleware);
+router.use(verifyToken);
 router.use(rateLimiter);
 
 /**
