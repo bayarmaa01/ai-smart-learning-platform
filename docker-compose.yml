@@ -59,6 +59,11 @@ services:
       - eduai-network
     environment:
       - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "test", "-f", "/root/.ollama"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     command: ["ollama", "serve"]
     pull_policy: always
     restart: unless-stopped
