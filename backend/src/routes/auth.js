@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const { query } = require('../config/database');
 const logger = require('../utils/logger');
+const { verifyToken } = require('../middleware/auth');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
@@ -245,6 +246,45 @@ router.post('/refresh', async (req, res) => {
       error: {
         code: 'INVALID_TOKEN',
         message: 'Invalid refresh token'
+      }
+    });
+  }
+});
+
+// Get current user profile
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await query('SELECT id, email, first_name, last_name, role FROM users WHERE id = $1', [userId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'User not found'
+        }
+      });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    logger.error('Get profile error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch profile'
       }
     });
   }
