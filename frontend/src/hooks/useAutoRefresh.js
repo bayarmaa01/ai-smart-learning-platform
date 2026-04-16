@@ -4,15 +4,15 @@
 // =============================================================================
 
 import { useEffect, useState } from 'react';
-import { getVersion, initVersionChecking, forceRefresh } from '../utils/version';
+import { getVersion, forceRefresh } from '../utils/version';
 
 export const useAutoRefresh = (checkInterval = 5000) => {
   const [version, setVersion] = useState(getVersion());
   const [isChecking, setIsChecking] = useState(false);
 
   useEffect(() => {
-    // Initialize version checking
-    initVersionChecking(checkInterval);
+    // Version checking is disabled
+    // initVersionChecking(checkInterval);
     
     // Set up periodic version check
     const interval = setInterval(() => {

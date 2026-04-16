@@ -52,7 +52,6 @@ export {
   getVersion,
   getCacheBuster,
   addVersionToUrl,
-  initVersionChecking,
   forceRefresh,
   getBuildInfo
 };
