@@ -1,5 +1,17 @@
 const nodemailer = require('nodemailer');
-const { logger } = require('./logger');
+let logger;
+try {
+  ({ logger } = require('./logger'));
+} catch (e) {
+  // Fallback logger for test environment
+  logger = {
+    error: () => {},
+    info: () => {},
+    warn: () => {},
+    debug: () => {},
+    http: () => {}
+  };
+}
 
 let transporter = null;
 

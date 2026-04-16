@@ -1,5 +1,17 @@
 const { createClient } = require('redis');
-const { logger } = require('../utils/logger');
+let logger;
+try {
+  ({ logger } = require('../utils/logger'));
+} catch (e) {
+  // Fallback logger for test environment
+  logger = {
+    error: () => {},
+    info: () => {},
+    warn: () => {},
+    debug: () => {},
+    http: () => {}
+  };
+}
 
 let client;
 

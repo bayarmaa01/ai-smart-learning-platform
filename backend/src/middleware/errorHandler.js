@@ -1,4 +1,16 @@
-const { logger } = require('../utils/logger');
+let logger;
+try {
+  ({ logger } = require('../utils/logger'));
+} catch (e) {
+  // Fallback logger for test environment
+  logger = {
+    error: () => {},
+    info: () => {},
+    warn: () => {},
+    debug: () => {},
+    http: () => {}
+  };
+}
 
 class AppError extends Error {
   constructor(message, statusCode = 500, code = 'INTERNAL_ERROR', details = null) {

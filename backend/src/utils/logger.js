@@ -49,4 +49,19 @@ const logger = winston.createLogger({
   ],
 });
 
-module.exports = { logger };
+// Global fallback logger for test environment - always use fallback during tests
+const isTestEnvironment = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+
+if (isTestEnvironment) {
+  module.exports = { 
+    logger: {
+      error: () => {},
+      info: () => {},
+      warn: () => {},
+      debug: () => {},
+      http: () => {}
+    }
+  };
+} else {
+  module.exports = { logger };
+}
