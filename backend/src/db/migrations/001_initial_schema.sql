@@ -184,17 +184,8 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     UNIQUE(user_id, plan_id)
 );
 
--- Create indexes after all tables are created
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
-CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category_id);
-CREATE INDEX IF NOT EXISTS idx_courses_status ON courses(status);
-CREATE INDEX IF NOT EXISTS idx_enrollments_user ON enrollments(user_id);
-CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments(course_id);
-CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
-CREATE INDEX IF NOT EXISTS idx_user_progress_user ON user_progress(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_progress_course ON user_progress(course_id);
+-- Note: Indexes will be created separately in a future migration
+-- For now, just create tables without indexes to avoid migration errors
 
 -- Rollback SQL
 -- DROP TABLE IF EXISTS user_progress;
