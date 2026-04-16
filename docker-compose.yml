@@ -59,7 +59,12 @@ services:
       - eduai-network
     environment:
       - OLLAMA_HOST=0.0.0.0
-    command: ["ollama", "serve"]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    entrypoint: ["/bin/sh", "-c", "ollama pull gemma:2b && ollama serve"]
     pull_policy: always
     restart: unless-stopped
 
@@ -81,8 +86,8 @@ services:
       DB_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      OLLAMA_URL: http://ollama:11435
-      OLLAMA_MODEL: gemma4:31b-cloud
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: gemma:2b
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
       FRONTEND_URL: http://localhost:3200
     depends_on:
