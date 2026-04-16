@@ -184,19 +184,15 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     UNIQUE(user_id, plan_id)
 );
 
--- Create indexes (only on tables that have tenant_id)
+-- Create indexes (only on tables that have tenant_id and exist)
 CREATE INDEX IF NOT EXISTS idx_users_tenant_email ON users(tenant_id, email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
-CREATE INDEX IF NOT EXISTS idx_courses_tenant ON courses(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_courses_instructor ON courses(instructor_id);
 CREATE INDEX IF NOT EXISTS idx_courses_category ON courses(category_id);
 CREATE INDEX IF NOT EXISTS idx_courses_status ON courses(status);
-CREATE INDEX IF NOT EXISTS idx_enrollments_tenant ON enrollments(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_user ON enrollments(user_id);
 CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments(course_id);
-CREATE INDEX IF NOT EXISTS idx_lessons_tenant ON lessons(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
-CREATE INDEX IF NOT EXISTS idx_user_progress_tenant ON user_progress(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_user_progress_user ON user_progress(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_progress_course ON user_progress(course_id);
 
