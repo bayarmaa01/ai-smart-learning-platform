@@ -59,12 +59,7 @@ services:
       - eduai-network
     environment:
       - OLLAMA_HOST=0.0.0.0
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull gemma:2b"]
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 10 && ollama pull gemma:2b"]
     pull_policy: always
     restart: unless-stopped
 
@@ -96,7 +91,7 @@ services:
       redis:
         condition: service_healthy
       ollama:
-        condition: service_healthy
+        condition: service_started
     networks:
       - eduai-network
     volumes:
