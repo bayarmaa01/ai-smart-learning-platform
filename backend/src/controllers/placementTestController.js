@@ -76,7 +76,7 @@ class PlacementTestController {
 
       // Calculate score
       let score = 0;
-      let maxScore = questions.length;
+      const maxScore = questions.length;
 
       questions.forEach((question, index) => {
         if (answers[index] !== undefined && answers[index] === question.correct) {

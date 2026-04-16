@@ -6,14 +6,6 @@ const { setCache, deleteCache, getCache, incrementCounter } = require('../cache/
 const { AppError } = require('../middleware/errorHandler');
 const { sendPasswordResetEmail, sendWelcomeEmail, sendVerificationEmail } = require('../utils/email');
 
-// Fallback logger for test environment
-const logger = {
-  error: () => {},
-  info: () => {},
-  warn: () => {},
-  debug: () => {},
-  http: () => {}
-};
 
 const generateTokens = (userId, role, tenantId) => {
   const accessToken = jwt.sign(
@@ -32,7 +24,6 @@ const generateTokens = (userId, role, tenantId) => {
 };
 
 const register = async (req, res) => {
-  try {
     const { email, password, firstName, lastName, role = 'student', tenantId } = req.body;
 
     // Validation
@@ -112,13 +103,10 @@ const register = async (req, res) => {
       tenantId: user.tenant_id,
     },
   });
-  } catch (error) {
-    throw error;
-  }
 };
 
 const login = async (req, res) => {
-  const { email, password } = req.body;
+    const { email, password } = req.body;
 
   const lockKey = `login:lock:${email}`;
   const isLocked = await getCache(lockKey);
@@ -178,9 +166,6 @@ const login = async (req, res) => {
       languagePreference: user.language_preference,
     },
   });
-  } catch (error) {
-    throw error;
-  }
 };
 
 const logout = async (req, res) => {

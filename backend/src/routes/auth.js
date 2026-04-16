@@ -1,10 +1,9 @@
 const express = require('express');
-const { body, validationResult } = require('express-validator');
+const { body } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
 const { register, login, refreshToken, getMe } = require('../controllers/authController');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
 
 // Register endpoint
 router.post('/register', [

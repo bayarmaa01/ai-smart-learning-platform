@@ -128,7 +128,6 @@ router.get('/history/:sessionId?', verifyToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { sessionId } = req.params;
-    const { courseId } = req.query;
 
     const actualSessionId = sessionId || `chat:${userId}:general`;
     

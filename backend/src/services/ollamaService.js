@@ -111,7 +111,7 @@ class OllamaService {
     }
   }
 
-  getFallbackResponse(message) {
+  getFallbackResponse(_message) {
     const fallbacks = [
       "I'm having trouble connecting to my AI services right now. Please try again in a moment.",
       "I apologize, but I'm experiencing technical difficulties. Please try again later.",
