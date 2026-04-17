@@ -128,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_course ON enrollments(course_id);
 CREATE INDEX IF NOT EXISTS idx_progress_student ON progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_course ON reviews(course_id);
 
--- Triggers for updated_at timestamps
+-- Trigger for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -145,3 +145,6 @@ CREATE TRIGGER update_courses_updated_at BEFORE UPDATE ON courses
 
 CREATE TRIGGER update_lessons_updated_at BEFORE UPDATE ON lessons
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Include exam system tables
+\i exam-system.sql

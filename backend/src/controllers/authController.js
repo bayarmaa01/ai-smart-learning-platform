@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { query } = require('../config/database');
+const { query } = require('../db/connection');
 
 const generateTokens = (userId, role, tenantId) => {
   const accessToken = jwt.sign(

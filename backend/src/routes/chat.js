@@ -1,7 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
-const { getRedis } = require('../config/database');
+const { query } = require('../db/connection');
+const { getCache, setCache, deleteCache } = require('../cache/redis');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -32,7 +33,7 @@ router.post('/', verifyToken, [
     // Get user context for course-aware AI
     let courseContext = '';
     if (courseId) {
-      const courseResult = await getRedis().query('SELECT title, description FROM courses WHERE id = $1', [courseId]);
+      const courseResult = await query('SELECT title, description FROM courses WHERE id = $1', [courseId]);
       if (courseResult.rows.length > 0) {
         courseContext = `Context: User is enrolled in course "${courseResult.rows[0].title}". `;
       }
@@ -47,7 +48,7 @@ router.post('/', verifyToken, [
       createdAt: new Date().toISOString()
     };
 
-    await getRedis().setex(sessionId, 3600, JSON.stringify(sessionData));
+    await setCache(sessionId, sessionData, 3600);
 
     // Prepare AI prompt
     const systemPrompt = `You are an AI tutor for an educational platform. Be helpful, educational, and encouraging.
@@ -84,12 +85,12 @@ If you don't know something, admit it and suggest where the user might find the 
       const aiMessage = aiResponse.response || 'I apologize, but I encountered an error processing your request.';
 
       // Update chat session
-      const currentSession = JSON.parse(await getRedis().get(sessionId) || '{}');
+      const currentSession = await getCache(sessionId) || {};
       currentSession.messages.push(
         { role: 'user', content: message, timestamp: new Date().toISOString() },
         { role: 'assistant', content: aiMessage, timestamp: new Date().toISOString() }
       );
-      await getRedis().setex(sessionId, 3600, JSON.stringify(currentSession));
+      await setCache(sessionId, currentSession, 3600);
 
       logger.info(`AI chat response for user ${userId}`);
 
@@ -131,7 +132,7 @@ router.get('/history/:sessionId?', verifyToken, async (req, res) => {
 
     const actualSessionId = sessionId || `chat:${userId}:general`;
     
-    const sessionData = await getRedis().get(actualSessionId);
+    const sessionData = await getCache(actualSessionId);
     if (!sessionData) {
       return res.json({
         success: true,
@@ -142,7 +143,7 @@ router.get('/history/:sessionId?', verifyToken, async (req, res) => {
       });
     }
 
-    const session = JSON.parse(sessionData);
+    const session = sessionData;
     
     res.json({
       success: true,
@@ -171,7 +172,7 @@ router.delete('/session/:sessionId', verifyToken, async (req, res) => {
     const { sessionId } = req.params;
     const actualSessionId = sessionId || `chat:${userId}:general`;
 
-    await getRedis().del(actualSessionId);
+    await deleteCache(actualSessionId);
     
     logger.info(`Chat session cleared: ${actualSessionId}`);
 
