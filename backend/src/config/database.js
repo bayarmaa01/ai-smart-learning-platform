@@ -25,7 +25,7 @@ const connectDB = async () => {
 
     // Redis connection
     redisClient = redis.createClient({
-      url: process.env.REDIS_URL || `redis://:${process.env.REDIS_PASSWORD || ''}@${process.env.REDIS_HOST || 'eduai-redis'}:${process.env.REDIS_PORT || 6379}`,
+      url: process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || 'eduai-redis'}:${process.env.REDIS_PORT || 6379}`,
       socket: {
         reconnectStrategy: (retries) => {
           if (retries > 10) {
