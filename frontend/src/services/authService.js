@@ -1,6 +1,6 @@
 import { jwtDecode } from 'jwt-decode';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4200/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 export const authService = {
   // Get current user from token
