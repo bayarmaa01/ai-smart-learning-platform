@@ -2,7 +2,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  baseURL: '/api/v1',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -25,6 +25,14 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Handle network errors
+    if (!error.response) {
+      const message = error.message || 'Network error. Please check your connection.';
+      toast.error(message);
+      return Promise.reject(error);
+    }
+
+    // Handle 401 Unauthorized
     if (error.response?.status === 401) {
       // Try to refresh token
       const refreshToken = localStorage.getItem('refreshToken');
@@ -53,8 +61,27 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    
-    const message = error.response?.data?.error?.message || error.message;
+
+    // Handle 403 Forbidden
+    if (error.response?.status === 403) {
+      toast.error('Access denied. You do not have permission to perform this action.');
+      return Promise.reject(error);
+    }
+
+    // Handle 404 Not Found
+    if (error.response?.status === 404) {
+      toast.error('Resource not found.');
+      return Promise.reject(error);
+    }
+
+    // Handle 500 Server Error
+    if (error.response?.status >= 500) {
+      toast.error('Server error. Please try again later.');
+      return Promise.reject(error);
+    }
+
+    // Handle other errors
+    const message = error.response?.data?.error?.message || error.response?.data?.message || error.message || 'An error occurred.';
     toast.error(message);
     return Promise.reject(error);
   }

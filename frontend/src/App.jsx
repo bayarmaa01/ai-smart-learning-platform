@@ -7,6 +7,7 @@ import { Toaster } from 'react-hot-toast';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import LoadingSpinner from './components/LoadingSpinner';
+import ProtectedRoute from './components/common/ProtectedRoute';
 
 // Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -39,17 +40,29 @@ function App() {
 
   useEffect(() => {
     // Check authentication status on mount
-    const token = localStorage.getItem('accessToken');
-    if (token) {
+    const initializeAuth = async () => {
       try {
-        const userData = authService.getCurrentUser();
-        setUser(userData);
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+          const userData = authService.getCurrentUser();
+          if (userData) {
+            setUser(userData);
+          } else {
+            // Token is invalid, clear it
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
+          }
+        }
       } catch (error) {
         console.error('Failed to restore user session:', error);
         localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
   const handleLogout = () => {
@@ -57,13 +70,7 @@ function App() {
     setUser(null);
   };
 
-  const ProtectedRoute = ({ children }) => {
-    if (!user) {
-      return <Navigate to="/login" replace />;
-    }
-    return children;
-  };
-
+  // Show loading spinner while checking authentication
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -86,43 +93,16 @@ function App() {
                 <Route path="/login" element={<Login setUser={setUser} />} />
                 <Route path="/register" element={<Register setUser={setUser} />} />
                 
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                
-                <Route path="/dashboard" element={
-                  <ProtectedRoute>
-                    <StudentDashboard user={user} />
-                  </ProtectedRoute>
-                } />
-                
-                <Route path="/teacher" element={
-                  <ProtectedRoute>
-                    <TeacherDashboard user={user} />
-                  </ProtectedRoute>
-                } />
-                
-                <Route path="/admin" element={
-                  <ProtectedRoute>
-                    <AdminDashboard user={user} />
-                  </ProtectedRoute>
-                } />
-                
-                <Route path="/courses" element={
-                  <ProtectedRoute>
-                    <Courses user={user} />
-                  </ProtectedRoute>
-                } />
-                
-                <Route path="/courses/:id" element={
-                  <ProtectedRoute>
-                    <CourseDetail user={user} />
-                  </ProtectedRoute>
-                } />
-                
-                <Route path="/profile" element={
-                  <ProtectedRoute>
-                    <Profile user={user} />
-                  </ProtectedRoute>
-                } />
+                <Route path="/" element={<ProtectedRoute />}>
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  
+                  <Route path="/dashboard" element={<StudentDashboard user={user} />} />
+                  <Route path="/instructor/dashboard" element={<TeacherDashboard user={user} />} />
+                  <Route path="/admin" element={<AdminDashboard user={user} />} />
+                  <Route path="/courses" element={<Courses user={user} />} />
+                  <Route path="/courses/:id" element={<CourseDetail user={user} />} />
+                  <Route path="/profile" element={<Profile user={user} />} />
+                </Route>
               </Routes>
             </main>
           </div>

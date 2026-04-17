@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import api from '../services/api';
 
@@ -11,6 +11,10 @@ const Login = ({ setUser }) => {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get the redirect path from location state or default to dashboard
+  const from = location.state?.from?.pathname || '/';
 
   const handleChange = (e) => {
     setFormData({
@@ -37,7 +41,7 @@ const Login = ({ setUser }) => {
         setUser(user);
         
         toast.success('Login successful!');
-        navigate('/dashboard');
+        navigate(from, { replace: true });
       } else {
         toast.error(response.data.error?.message || 'Login failed');
       }
