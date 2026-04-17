@@ -30,8 +30,8 @@ FROM nginx:1.25-alpine AS production
 RUN apk upgrade --no-cache && \
     apk add --no-cache wget
 
-# Copy NGINX config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy complete nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
