@@ -9,7 +9,7 @@ const connectDB = async () => {
   try {
     // PostgreSQL connection
     pool = new Pool({
-      host: process.env.DB_HOST || 'localhost',
+      host: process.env.DB_HOST || 'eduai-postgres',
       port: process.env.DB_PORT || 5432,
       database: process.env.DB_NAME || 'eduai',
       user: process.env.DB_USER || 'postgres',
@@ -67,14 +67,22 @@ const query = async (text, params) => {
   const start = Date.now();
   try {
     if (!pool) {
+      logger.error('Database pool is undefined - connectDB() may not have been called');
       throw new Error('Database not initialized. Call connectDB() first.');
     }
+    
+    logger.debug('Executing query:', { text, params });
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
-    logger.debug('Executed query', { text, duration, rows: res.rowCount });
+    logger.debug('Query executed successfully', { text, duration, rows: res.rowCount });
     return res;
   } catch (error) {
-    logger.error('Database query error', { text, error: error.message });
+    logger.error('Database query error', { 
+      text, 
+      params: params || 'none',
+      error: error.message,
+      stack: error.stack 
+    });
     throw error;
   }
 };

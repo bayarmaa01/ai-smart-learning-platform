@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { verifyToken } = require('../middleware/auth');
-const { query } = require('../db/connection');
+const { query } = require('../config/database');
 const { getCache, setCache, deleteCache } = require('../cache/redis');
 const logger = require('../utils/logger');
 

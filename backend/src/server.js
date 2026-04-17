@@ -11,7 +11,7 @@ const cookieParser = require('cookie-parser');
 const hpp = require('hpp');
 const rateLimit = require('express-rate-limit');
 
-const { connectDB } = require('./db/connection');
+const { connectDB } = require('./config/database');
 const { connectRedis } = require('./cache/redis');
 const { setupSocketIO } = require('./websocket/socket');
 const { setupMetrics } = require('./monitoring/metrics');

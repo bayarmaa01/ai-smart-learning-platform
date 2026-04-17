@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { query } = require('../db/connection');
+const { query } = require('../config/database');
 
 const generateTokens = (userId, role, tenantId) => {
   const accessToken = jwt.sign(
@@ -77,10 +77,9 @@ const register = async (req, res) => {
     console.log('Validation passed, checking existing user...');
 
     // Check for existing user
-    const resolvedTenantId = tenantId || '00000000-0000-0000-0000-000000000001';
     const existingUser = await query(
-      'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
-      [email, resolvedTenantId]
+      'SELECT id FROM users WHERE email = $1',
+      [email]
     );
 
     if (existingUser.rows.length > 0) {
