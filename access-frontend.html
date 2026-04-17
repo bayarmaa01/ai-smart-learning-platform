@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Access Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .status { color: #666; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #17a2b8; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        .test-result { margin: 20px 0; padding: 15px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>AI Smart Learning Platform - Frontend Access</h1>
+    
+    <div class="status info">
+        <h3>Current Status:</h3>
+        <p><strong>Frontend Container:</strong> Running and Healthy</p>
+        <p><strong>Port 3200:</strong> Listening correctly</p>
+        <p><strong>Issue:</strong> Connection reset by peer (curl)</p>
+        <p><strong>Container Logs:</strong> Nginx responding to health checks</p>
+    </div>
+
+    <div class="test-result">
+        <h3>Access Methods:</h3>
+        <p><strong>Direct Browser Access:</strong></p>
+        <button onclick="window.open('http://localhost:3200', '_blank')">Open Frontend in Browser</button>
+        
+        <p><strong>Alternative Access:</strong></p>
+        <button onclick="window.open('http://127.0.0.1:3200', '_blank')">Try 127.0.0.1:3200</button>
+        
+        <p><strong>Backend API:</strong></p>
+        <button onclick="window.open('http://localhost:4200/api/v1/health', '_blank')">Test Backend Health</button>
+    </div>
+
+    <div class="status">
+        <h3>Troubleshooting Steps:</h3>
+        <ol>
+            <li>Try opening frontend in browser using the button above</li>
+            <li>If browser works, issue is with curl/Windows networking</li>
+            <li>If browser doesn't work, try restarting Docker Desktop</li>
+            <li>Check Windows Firewall settings</li>
+            <li>Try accessing from different browser (Chrome, Firefox, Edge)</li>
+        </ol>
+    </div>
+
+    <script>
+        // Auto-test backend health
+        fetch('http://localhost:4200/api/v1/health')
+            .then(response => {
+                document.getElementById('backend-status').innerHTML = '✅ Backend API: Working';
+            })
+            .catch(error => {
+                document.getElementById('backend-status').innerHTML = '❌ Backend API: Not Working';
+            });
+    </script>
+</body>
+</html>
