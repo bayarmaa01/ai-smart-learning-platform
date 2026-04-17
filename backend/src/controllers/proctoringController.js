@@ -129,7 +129,7 @@ class ProctoringController {
       const { exam_id, user_id, warning_type, severity, page = 1, limit = 50 } = req.query;
 
       let whereClause = 'WHERE 1=1';
-      let params = [];
+      const params = [];
       let paramIndex = 1;
 
       if (exam_id) {
@@ -304,7 +304,7 @@ class ProctoringController {
       const { exam_id } = req.query;
 
       let whereClause = 'WHERE 1=1';
-      let params = [];
+      const params = [];
       let paramIndex = 1;
 
       if (exam_id) {
@@ -410,7 +410,7 @@ class ProctoringController {
       const criticalWarnings = warningCount.rows.find(row => row.severity === 'critical')?.count || 0;
       const highWarnings = warningCount.rows.find(row => row.severity === 'high')?.count || 0;
 
-      let cheatingFlags = {};
+      const cheatingFlags = {};
 
       if (totalWarnings >= 5) {
         cheatingFlags.cheating_detected = true;

@@ -488,7 +488,7 @@ class AttemptController {
       const { exam_id } = req.query;
 
       let whereClause = 'WHERE a.user_id = $1';
-      let params = [user_id];
+      const params = [user_id];
 
       if (exam_id) {
         whereClause += ' AND a.exam_id = $2';
@@ -545,7 +545,7 @@ class AttemptController {
       const { exam_id } = req.query;
 
       let whereClause = 'WHERE e.instructor_id = $1';
-      let params = [user_id];
+      const params = [user_id];
 
       if (exam_id) {
         whereClause += ' AND a.exam_id = $2';

@@ -102,7 +102,7 @@ const register = async (req, res) => {
       `INSERT INTO users (email, password_hash, first_name, last_name, role, tenant_id, email_verification_token)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, email, first_name, last_name, role, tenant_id, language_preference`,
-      [email, passwordHash, firstName, lastName || 'User', normalizedRole, resolvedTenantId, verificationToken]
+      [email, passwordHash, firstName, lastName || 'User', normalizedRole, tenantId || '00000000-0000-0000-0000-000000000001', verificationToken]
     );
 
     const user = result.rows[0];
