@@ -66,6 +66,9 @@ const getRedis = () => {
 const query = async (text, params) => {
   const start = Date.now();
   try {
+    if (!pool) {
+      throw new Error('Database not initialized. Call connectDB() first.');
+    }
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
     logger.debug('Executed query', { text, duration, rows: res.rowCount });
