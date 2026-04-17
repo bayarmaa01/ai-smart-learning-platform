@@ -79,8 +79,9 @@ services:
       DB_NAME: eduai
       DB_USER: postgres
       DB_PASSWORD: postgres
-      REDIS_HOST: redis
+      REDIS_HOST: eduai-redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_secure_pass
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: gemma:2b
       JWT_SECRET: your-super-secret-jwt-key-change-in-production
@@ -97,10 +98,11 @@ services:
     volumes:
       - ./backend/logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/api/v1/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/api/v1/health || exit 1"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   # Frontend React App
   frontend:

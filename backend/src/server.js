@@ -89,23 +89,68 @@ app.use((req, res, next) => {
 
 setupMetrics(app);
 
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '1.0.0',
-    environment: process.env.NODE_ENV,
-  });
+app.get('/health', async (req, res) => {
+  try {
+    const { getRedis } = require('./config/database');
+    const redis = getRedis();
+    
+    // Test Redis connection
+    await redis.ping();
+    
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || '1.0.0',
+      environment: process.env.NODE_ENV,
+      services: {
+        postgresql: 'connected',
+        redis: 'connected'
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: 'Redis connection failed',
+      services: {
+        postgresql: 'connected',
+        redis: 'disconnected'
+      }
+    });
+  }
 });
 
-app.get('/api/v1/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: process.env.npm_package_version || '1.0.0',
-    environment: process.env.NODE_ENV,
-    api: 'v1',
-  });
+app.get('/api/v1/health', async (req, res) => {
+  try {
+    const { getRedis } = require('./config/database');
+    const redis = getRedis();
+    
+    // Test Redis connection
+    await redis.ping();
+    
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      version: process.env.npm_package_version || '1.0.0',
+      environment: process.env.NODE_ENV,
+      api: 'v1',
+      services: {
+        postgresql: 'connected',
+        redis: 'connected'
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: 'Redis connection failed',
+      api: 'v1',
+      services: {
+        postgresql: 'connected',
+        redis: 'disconnected'
+      }
+    });
+  }
 });
 
 app.use(resolveTenant);

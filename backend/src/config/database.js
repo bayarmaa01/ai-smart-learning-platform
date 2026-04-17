@@ -25,11 +25,16 @@ const connectDB = async () => {
 
     // Redis connection
     redisClient = redis.createClient({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: process.env.REDIS_PORT || 6379,
-      retry_delay_on_failover: 100,
-      enable_ready_check: true,
-      max_retries_per_request: 3,
+      url: process.env.REDIS_URL || `redis://:${process.env.REDIS_PASSWORD || ''}@${process.env.REDIS_HOST || 'eduai-redis'}:${process.env.REDIS_PORT || 6379}`,
+      socket: {
+        reconnectStrategy: (retries) => {
+          if (retries > 10) {
+            logger.error('Redis: max reconnection attempts reached');
+            return new Error('Max reconnection attempts reached');
+          }
+          return Math.min(retries * 100, 3000);
+        },
+      },
     });
 
     redisClient.on('error', (err) => {
