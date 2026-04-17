@@ -1,13 +1,13 @@
 const express = require('express');
 const { body, param, query } = require('express-validator');
 const AttemptController = require('../controllers/attemptController');
-const { authenticate, authorize } = require('../middleware/auth');
-const { validate } = require('../middleware/validator');
+const { verifyToken, authorize } = require('../middleware/auth');
+const { validate } = require('../middleware/validate');
 
 const router = express.Router();
 
 // Apply authentication to all routes
-router.use(authenticate);
+router.use(verifyToken);
 
 // Validation rules
 const startAttemptValidation = [

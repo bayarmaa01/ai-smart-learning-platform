@@ -1,13 +1,13 @@
 const express = require('express');
 const { body, param } = require('express-validator');
 const QuestionController = require('../controllers/questionController');
-const { authenticate, authorize } = require('../middleware/auth');
-const { validate } = require('../middleware/validator');
+const { verifyToken, authorize } = require('../middleware/auth');
+const { validate } = require('../middleware/validate');
 
 const router = express.Router();
 
 // Apply authentication to all routes
-router.use(authenticate);
+router.use(verifyToken);
 
 // Validation rules
 const createQuestionValidation = [
