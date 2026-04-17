@@ -19,8 +19,10 @@ import Courses from './pages/Courses';
 import CourseDetail from './pages/CourseDetail';
 import Profile from './pages/Profile';
 
+// Contexts
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
 // Services
-import { authService } from './services/authService';
 import api from './services/api';
 
 // Create a client
@@ -33,41 +35,12 @@ const queryClient = new QueryClient({
   },
 });
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+function AppContent() {
+  const { user, loading, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    // Check authentication status on mount
-    const initializeAuth = async () => {
-      try {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          const userData = authService.getCurrentUser();
-          if (userData) {
-            setUser(userData);
-          } else {
-            // Token is invalid, clear it
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-          }
-        }
-      } catch (error) {
-        console.error('Failed to restore user session:', error);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeAuth();
-  }, []);
-
-  const handleLogout = () => {
-    authService.logout();
-    setUser(null);
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
   };
 
   // Show loading spinner while checking authentication
@@ -80,44 +53,52 @@ function App() {
   }
 
   return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar user={user} onLogout={logout} onToggleSidebar={handleSidebarToggle} />
+      
+      <div className="flex">
+        <Sidebar isOpen={sidebarOpen} userRole={user?.role} />
+        
+        <main className="flex-1">
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            
+            <Route path="/" element={<ProtectedRoute />}>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              
+              <Route path="/dashboard" element={<StudentDashboard user={user} />} />
+              <Route path="/instructor/dashboard" element={<TeacherDashboard user={user} />} />
+              <Route path="/admin" element={<AdminDashboard user={user} />} />
+              <Route path="/courses" element={<Courses user={user} />} />
+              <Route path="/courses/:id" element={<CourseDetail user={user} />} />
+              <Route path="/profile" element={<Profile user={user} />} />
+            </Route>
+          </Routes>
+        </main>
+      </div>
+      
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+        }}
+      />
+    </div>
+  );
+}
+
+function App() {
+  return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <div className="min-h-screen bg-gray-50">
-          <Navbar user={user} onLogout={handleLogout} onToggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-          
-          <div className="flex">
-            <Sidebar isOpen={sidebarOpen} userRole={user?.role} />
-            
-            <main className="flex-1">
-              <Routes>
-                <Route path="/login" element={<Login setUser={setUser} />} />
-                <Route path="/register" element={<Register setUser={setUser} />} />
-                
-                <Route path="/" element={<ProtectedRoute />}>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  
-                  <Route path="/dashboard" element={<StudentDashboard user={user} />} />
-                  <Route path="/instructor/dashboard" element={<TeacherDashboard user={user} />} />
-                  <Route path="/admin" element={<AdminDashboard user={user} />} />
-                  <Route path="/courses" element={<Courses user={user} />} />
-                  <Route path="/courses/:id" element={<CourseDetail user={user} />} />
-                  <Route path="/profile" element={<Profile user={user} />} />
-                </Route>
-              </Routes>
-            </main>
-          </div>
-        </div>
-        
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-          }}
-        />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </Router>
     </QueryClientProvider>
   );

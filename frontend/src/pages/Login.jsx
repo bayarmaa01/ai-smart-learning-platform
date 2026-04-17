@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
-const Login = ({ setUser }) => {
+const Login = () => {
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -28,25 +30,16 @@ const Login = ({ setUser }) => {
     setLoading(true);
 
     try {
-      const response = await api.post('/auth/login', formData);
+      const result = await login(formData);
       
-      if (response.data.success) {
-        const { user, accessToken, refreshToken } = response.data.data;
-        
-        // Store tokens
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
-        
-        // Update user state
-        setUser(user);
-        
+      if (result.success) {
         toast.success('Login successful!');
         navigate(from, { replace: true });
       } else {
-        toast.error(response.data.error?.message || 'Login failed');
+        toast.error(result.error?.message || 'Login failed');
       }
     } catch (error) {
-      toast.error(error.response?.data?.error?.message || 'Login failed');
+      toast.error('Login failed');
     } finally {
       setLoading(false);
     }

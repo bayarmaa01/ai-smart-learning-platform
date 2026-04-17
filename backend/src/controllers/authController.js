@@ -24,148 +24,244 @@ const generateTokens = (userId, role, tenantId) => {
 };
 
 const register = async (req, res) => {
-    const { email, password, firstName, lastName, role = 'student', tenantId } = req.body;
+    try {
+        const { email, password, firstName, lastName, role = 'student', tenantId } = req.body;
 
-    // Validation
-    if (!email || !password || !firstName) {
-      throw new AppError('All fields are required', 400, 'VALIDATION_ERROR');
-    }
+        // Validation
+        if (!email || !password || !firstName) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'All fields are required',
+                    code: 'VALIDATION_ERROR'
+                }
+            });
+        }
 
-  if (!/\S+@\S+\.\S+/.test(email)) {
-    throw new AppError('Invalid email format', 400, 'INVALID_EMAIL');
-  }
+        if (!/\S+@\S+\.\S+/.test(email)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Invalid email format',
+                    code: 'INVALID_EMAIL'
+                }
+            });
+        }
 
-  if (password.length < 6) {
-    throw new AppError('Password must be at least 6 characters', 400, 'PASSWORD_TOO_SHORT');
-  }
+        if (password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Password must be at least 6 characters',
+                    code: 'PASSWORD_TOO_SHORT'
+                }
+            });
+        }
 
-  // Use provided lastName or default to 'User'
-  const finalLastName = lastName || 'User';
+        // Use provided lastName or default to 'User'
+        const finalLastName = lastName || 'User';
 
-  if (!['student', 'instructor'].includes(role)) {
-    throw new AppError('Invalid role. Must be student or instructor', 400, 'INVALID_ROLE');
-  }
+        // Map "teacher" to "instructor" for backward compatibility
+        let normalizedRole = role;
+        if (role === 'teacher') {
+            normalizedRole = 'instructor';
+        }
+
+        if (!['student', 'instructor'].includes(normalizedRole)) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Invalid role. Must be student or instructor',
+                    code: 'INVALID_ROLE'
+                }
+            });
+        }
 
   // Check for existing user
-  const resolvedTenantId = tenantId || '00000000-0000-0000-0000-000000000001';
-  const existingUser = await query(
-    'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
-    [email, resolvedTenantId]
-  );
+        const resolvedTenantId = tenantId || '00000000-0000-0000-0000-000000000001';
+        const existingUser = await query(
+            'SELECT id FROM users WHERE email = $1 AND tenant_id = $2',
+            [email, resolvedTenantId]
+        );
 
-  if (existingUser.rows.length > 0) {
-    console.log('Existing user found, throwing AppError with 409');
-    throw new AppError('Email already registered', 409, 'EMAIL_EXISTS');
-  }
+        if (existingUser.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                error: {
+                    message: 'Email already registered',
+                    code: 'EMAIL_EXISTS'
+                }
+            });
+        }
 
-  // Rate limiting
-  const failedAttempts = await incrementCounter(`register:${req.ip}`, 3600);
-  if (failedAttempts > 10) {
-    throw new AppError('Too many registration attempts', 429, 'RATE_LIMIT');
-  }
+        // Rate limiting
+        const failedAttempts = await incrementCounter(`register:${req.ip}`, 3600);
+        if (failedAttempts > 10) {
+            return res.status(429).json({
+                success: false,
+                error: {
+                    message: 'Too many registration attempts',
+                    code: 'RATE_LIMIT'
+                }
+            });
+        }
 
-  // Create user
-  const passwordHash = await bcrypt.hash(password, 12);
-  const verificationToken = crypto.randomBytes(32).toString('hex');
+        // Create user
+        const passwordHash = await bcrypt.hash(password, 12);
+        const verificationToken = crypto.randomBytes(32).toString('hex');
 
-  const result = await query(
-    `INSERT INTO users (email, password_hash, first_name, last_name, role, tenant_id, email_verification_token)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
-     RETURNING id, email, first_name, last_name, role, tenant_id, language_preference`,
-    [email, passwordHash, firstName, finalLastName, role, resolvedTenantId, verificationToken]
-  );
+        const result = await query(
+            `INSERT INTO users (email, password_hash, first_name, last_name, role, tenant_id, email_verification_token)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING id, email, first_name, last_name, role, tenant_id, language_preference`,
+            [email, passwordHash, firstName, finalLastName, normalizedRole, resolvedTenantId, verificationToken]
+        );
 
   const user = result.rows[0];
-  const { accessToken, refreshToken } = generateTokens(user.id, user.role, user.tenant_id);
+        const { accessToken, refreshToken } = generateTokens(user.id, user.role, user.tenant_id);
 
-  // Store refresh token
-  const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  await query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, ip_address, expires_at)
-     VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')`,
-    [user.id, refreshTokenHash, req.ip]
-  );
+        // Store refresh token
+        const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        await query(
+            `INSERT INTO refresh_tokens (user_id, token_hash, ip_address, expires_at)
+             VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')`,
+            [user.id, refreshTokenHash, req.ip]
+        );
 
-  // Send welcome + verification emails (non-blocking)
-  sendWelcomeEmail(email, firstName).catch(() => {});
-  sendVerificationEmail(email, firstName, verificationToken).catch(() => {});
+        // Send welcome + verification emails (non-blocking)
+        sendWelcomeEmail(email, firstName).catch(() => {});
+        sendVerificationEmail(email, firstName, verificationToken).catch(() => {});
 
-  res.status(201).json({
-    success: true,
-    accessToken,
-    refreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      role: user.role,
-      tenantId: user.tenant_id,
-    },
-  });
-};
+        return res.status(201).json({
+            success: true,
+            data: {
+                accessToken,
+                refreshToken,
+                user: {
+                        id: user.id,
+                        email: user.email,
+                        firstName: user.first_name,
+                        lastName: user.last_name,
+                        role: user.role,
+                        tenantId: user.tenant_id,
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Registration error:', error);
+            return res.status(500).json({
+                success: false,
+                error: {
+                    message: 'Internal server error during registration',
+                    code: 'REGISTRATION_ERROR'
+                }
+            });
+        }
+    };
 
 const login = async (req, res) => {
-    const { email, password } = req.body;
+    try {
+        const { email, password } = req.body;
 
-  const lockKey = `login:lock:${email}`;
-  const isLocked = await getCache(lockKey);
-  if (isLocked) {
-    throw new AppError('Account temporarily locked. Please try again in 15 minutes.', 423, 'ACCOUNT_LOCKED');
-  }
+        // Validation
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    message: 'Email and password are required',
+                    code: 'VALIDATION_ERROR'
+                }
+            });
+        }
 
-  const result = await query(
-    `SELECT id, email, password_hash, first_name, last_name, role, tenant_id,
-            is_active, failed_login_attempts, language_preference
-     FROM users WHERE email = $1`,
-    [email]
-  );
+        const lockKey = `login:lock:${email}`;
+        const isLocked = await getCache(lockKey);
+        if (isLocked) {
+            return res.status(423).json({
+                success: false,
+                error: {
+                    message: 'Account temporarily locked. Please try again in 15 minutes.',
+                    code: 'ACCOUNT_LOCKED'
+                }
+            });
+        }
 
-  const user = result.rows[0];
+        const result = await query(
+            `SELECT id, email, password_hash, first_name, last_name, role, tenant_id,
+                    is_active, failed_login_attempts, language_preference
+             FROM users WHERE email = $1`,
+            [email]
+        );
 
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
-    if (user) {
-      const attempts = user.failed_login_attempts + 1;
-      await query('UPDATE users SET failed_login_attempts = $1 WHERE id = $2', [attempts, user.id]);
-      if (attempts >= 5) {
-        await setCache(lockKey, true, 15 * 60);
-      }
+        const user = result.rows[0];
+
+        if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+            if (user) {
+                const attempts = user.failed_login_attempts + 1;
+                await query('UPDATE users SET failed_login_attempts = $1 WHERE id = $2', [attempts, user.id]);
+                if (attempts >= 5) {
+                    await setCache(lockKey, true, 15 * 60);
+                }
+            }
+            return res.status(401).json({
+                success: false,
+                error: {
+                    message: 'Invalid email or password',
+                    code: 'INVALID_CREDENTIALS'
+                }
+            });
+        }
+
+        if (!user.is_active) {
+            return res.status(401).json({
+                success: false,
+                error: {
+                    message: 'Account is deactivated',
+                    code: 'ACCOUNT_DEACTIVATED'
+                }
+            });
+        }
+
+        await query(
+            'UPDATE users SET failed_login_attempts = 0, last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1',
+            [user.id]
+        );
+
+        const { accessToken, refreshToken } = generateTokens(user.id, user.role, user.tenant_id);
+
+        const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        await query(
+            `INSERT INTO refresh_tokens (user_id, token_hash, ip_address, expires_at)
+             VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')`,
+            [user.id, refreshTokenHash, req.ip]
+        );
+
+        return res.json({
+            success: true,
+            data: {
+                accessToken,
+                refreshToken,
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    firstName: user.first_name,
+                    lastName: user.last_name,
+                    role: user.role,
+                    tenantId: user.tenant_id,
+                    languagePreference: user.language_preference,
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        return res.status(500).json({
+            success: false,
+            error: {
+                message: 'Internal server error during login',
+                code: 'LOGIN_ERROR'
+            }
+        });
     }
-    throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
-  }
-
-  if (!user.is_active) {
-    throw new AppError('Account is deactivated', 401, 'ACCOUNT_DEACTIVATED');
-  }
-
-  await query(
-    'UPDATE users SET failed_login_attempts = 0, last_login_at = NOW(), login_count = login_count + 1 WHERE id = $1',
-    [user.id]
-  );
-
-  const { accessToken, refreshToken } = generateTokens(user.id, user.role, user.tenant_id);
-
-  const refreshTokenHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
-  await query(
-    `INSERT INTO refresh_tokens (user_id, token_hash, ip_address, expires_at)
-     VALUES ($1, $2, $3, NOW() + INTERVAL '7 days')`,
-    [user.id, refreshTokenHash, req.ip]
-  );
-
-  res.json({
-    success: true,
-    accessToken,
-    refreshToken,
-    user: {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      role: user.role,
-      tenantId: user.tenant_id,
-      languagePreference: user.language_preference,
-    },
-  });
 };
 
 const logout = async (req, res) => {

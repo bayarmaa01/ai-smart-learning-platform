@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
-const Register = ({ setUser }) => {
+const Register = () => {
+  const { register } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -34,7 +36,7 @@ const Register = ({ setUser }) => {
     }
 
     try {
-      const response = await api.post('/auth/register', {
+      const result = await register({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -42,23 +44,14 @@ const Register = ({ setUser }) => {
         role: formData.role
       });
       
-      if (response.data.success) {
-        const { user, accessToken, refreshToken } = response.data.data;
-        
-        // Store tokens
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', refreshToken);
-        
-        // Update user state
-        setUser(user);
-        
+      if (result.success) {
         toast.success('Registration successful!');
         navigate('/dashboard');
       } else {
-        toast.error(response.data.error?.message || 'Registration failed');
+        toast.error(result.error?.message || 'Registration failed');
       }
     } catch (error) {
-      toast.error(error.response?.data?.error?.message || 'Registration failed');
+      toast.error('Registration failed');
     } finally {
       setLoading(false);
     }
