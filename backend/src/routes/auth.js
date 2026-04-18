@@ -11,7 +11,7 @@ router.post('/register', [
   body('password').isLength({ min: 6 }),
   body('firstName').notEmpty().trim(),
   body('lastName').notEmpty().trim(),
-  body('role').optional().isIn(['student', 'teacher'])
+  body('role').optional().isIn(['student', 'instructor'])
 ], register);
 
 // Login endpoint

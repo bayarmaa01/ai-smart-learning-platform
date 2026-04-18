@@ -22,12 +22,19 @@ export const AuthProvider = ({ children }) => {
       try {
         const token = localStorage.getItem('accessToken');
         if (token) {
-          const userData = authService.getCurrentUser();
-          if (userData) {
-            setUser(userData);
-            setIsAuthenticated(true);
-          } else {
-            // Token is invalid, clear it
+          // Validate token with backend
+          try {
+            const response = await api.get('/auth/me');
+            if (response.data.success) {
+              setUser(response.data.data.user);
+              setIsAuthenticated(true);
+            } else {
+              // Invalid response, clear tokens
+              localStorage.removeItem('accessToken');
+              localStorage.removeItem('refreshToken');
+            }
+          } catch (error) {
+            // Token invalid or expired, clear it
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
           }

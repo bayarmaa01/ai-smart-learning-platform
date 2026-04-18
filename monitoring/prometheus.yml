@@ -8,21 +8,22 @@ scrape_configs:
       - targets: ['backend:5000']
     metrics_path: '/metrics'
     scrape_interval: 5s
+    scrape_timeout: 5s
 
-  - job_name: 'eduai-postgres'
+  # Note: PostgreSQL and Redis don't expose metrics by default
+  # You need to install exporters like postgres_exporter and redis_exporter
+  # For now, these will fail but won't break Prometheus
+  
+  - job_name: 'eduai-nginx'
     static_configs:
-      - targets: ['postgres:5432']
-    metrics_path: '/metrics'
+      - targets: ['nginx:80']
+    metrics_path: '/health'
     scrape_interval: 30s
+    scrape_timeout: 3s
 
-  - job_name: 'eduai-redis'
+  - job_name: 'eduai-frontend'
     static_configs:
-      - targets: ['redis:6379']
-    metrics_path: '/metrics'
+      - targets: ['frontend:80']
+    metrics_path: '/health'
     scrape_interval: 30s
-
-  - job_name: 'eduai-ollama'
-    static_configs:
-      - targets: ['ollama:11434']
-    metrics_path: '/api/tags'
-    scrape_interval: 30s
+    scrape_timeout: 3s

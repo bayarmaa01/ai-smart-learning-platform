@@ -260,16 +260,39 @@ const refreshToken = async (req, res) => {
 
 const getMe = async (req, res) => {
   try {
-    // For now, return a simple response
+    const userId = req.user.userId;
+    
+    const result = await query(
+      `SELECT id, email, first_name, last_name, role, tenant_id, language_preference, avatar_url, bio
+       FROM users WHERE id = $1 AND is_active = true`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'User not found',
+          code: 'USER_NOT_FOUND'
+        }
+      });
+    }
+
+    const user = result.rows[0];
+    
     return res.json({
       success: true,
       data: {
         user: {
-          id: 'temp-id',
-          email: 'temp@example.com',
-          firstName: 'Temp',
-          lastName: 'User',
-          role: 'student'
+          id: user.id,
+          email: user.email,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          role: user.role,
+          tenantId: user.tenant_id,
+          languagePreference: user.language_preference,
+          avatarUrl: user.avatar_url,
+          bio: user.bio
         }
       }
     });

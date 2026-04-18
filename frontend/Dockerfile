@@ -49,9 +49,9 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
 COPY nginx.conf /etc/nginx/nginx.conf
 RUN chown -R nginx-user:nginx-user /etc/nginx
 
-EXPOSE 3000
+EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+    CMD wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
 
 CMD ["nginx", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
