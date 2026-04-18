@@ -115,7 +115,8 @@ services:
       PORT: 8000
       DEBUG: false
       REDIS_URL: redis://eduai-redis:6379
-      OLLAMA_URL: http://eduai-ollama:11434
+      OLLAMA_BASE_URL: http://eduai-ollama:11434
+      AI_PROVIDER: ollama
     depends_on:
       - redis
       - ollama

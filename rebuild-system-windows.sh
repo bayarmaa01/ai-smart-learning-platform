@@ -86,7 +86,7 @@ done
 print_status "Step 8: Testing API endpoints..."
 
 # Test backend health
-print_test "Testing backend health endpoint..."
+print_status "Testing backend health endpoint..."
 if curl.exe -s -f http://localhost:4000/api/v1/health > /dev/null 2>&1 || curl -s -f http://localhost:4000/api/v1/health > /dev/null; then
     print_status "✅ Backend health endpoint working"
 else
@@ -94,7 +94,7 @@ else
 fi
 
 # Test AI service
-print_test "Testing AI service endpoint..."
+print_status "Testing AI service endpoint..."
 if curl.exe -s -f http://localhost:5000/health > /dev/null 2>&1 || curl -s -f http://localhost:5000/health > /dev/null; then
     print_status "✅ AI service health endpoint working"
 else
@@ -102,7 +102,7 @@ else
 fi
 
 # Test frontend
-print_test "Testing frontend main page..."
+print_status "Testing frontend main page..."
 if curl.exe -s -f http://localhost:3000/ > /dev/null 2>&1 || curl -s -f http://localhost:3000/ > /dev/null; then
     print_status "✅ Frontend is accessible"
 else
