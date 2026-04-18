@@ -1,7 +1,7 @@
 import React from 'react';
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
-export default class ErrorBoundary extends React.Component {
+class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, error: null, errorInfo: null };
@@ -9,16 +9,18 @@ export default class ErrorBoundary extends React.Component {
 
   static getDerivedStateFromError(error) {
     // Update state so the next render will show the fallback UI
-    return { hasError: true };
+    return { hasError: true, error };
   }
 
   componentDidCatch(error, errorInfo) {
-    // You can also log the error to an error reporting service
-    console.error('Error caught by boundary:', error, errorInfo);
-    this.setState({
-      error: error,
-      errorInfo: errorInfo
-    });
+    // Log the error to console and show toast
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    
+    // Show user-friendly error message
+    toast.error('Something went wrong. Please refresh the page.');
+    
+    // You can also log the error to a service here
+    // logErrorToService(error, errorInfo);
   }
 
   handleReset = () => {
@@ -29,38 +31,29 @@ export default class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       // You can render any custom fallback UI
       return (
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-lg p-6 text-center">
-            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="w-8 h-8 text-red-400" />
-            </div>
-            
-            <h2 className="text-xl font-bold text-white mb-2">
-              Something went wrong
-            </h2>
-            
-            <p className="text-slate-400 mb-6">
-              The application encountered an unexpected error. Please try refreshing the page.
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center p-8">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Something went wrong</h1>
+            <p className="text-gray-600 mb-4">
+              {this.state.error?.message || 'An unexpected error occurred'}
             </p>
-
-            {process.env.NODE_ENV === 'development' && this.state.error && (
-              <details className="text-left mb-6 p-4 bg-slate-800 rounded-lg">
-                <summary className="text-sm font-medium text-slate-300 cursor-pointer mb-2">
-                  Error Details
-                </summary>
-                <pre className="text-xs text-red-400 overflow-auto">
-                  {this.state.error && this.state.error.toString()}
-                  <br />
-                  {this.state.errorInfo.componentStack}
-                </pre>
-              </details>
-            )}
+            
+            <details className="mb-4 text-left">
+              <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
+                View Error Details
+              </summary>
+              <pre className="text-xs text-red-400 overflow-auto mt-2 p-2 bg-gray-100 rounded">
+                {this.state.error && this.state.error.toString()}
+                <br />
+                {this.state.errorInfo.componentStack}
+              </pre>
+            </details>
 
             <button
               onClick={this.handleReset}
-              className="w-full bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
-              <RefreshCw className="w-4 h-4" />
               Try Again
             </button>
             
@@ -78,3 +71,5 @@ export default class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;

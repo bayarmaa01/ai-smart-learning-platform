@@ -8,6 +8,7 @@ import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import LoadingSpinner from './components/LoadingSpinner';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Pages
 import StudentDashboard from './pages/student/Dashboard';
@@ -60,21 +61,23 @@ function AppContent() {
         <Sidebar isOpen={sidebarOpen} userRole={user?.role} />
         
         <main className="flex-1">
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            
-            <Route path="/" element={<ProtectedRoute />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
               
-              <Route path="/dashboard" element={<StudentDashboard user={user} />} />
-              <Route path="/instructor/dashboard" element={<TeacherDashboard user={user} />} />
-              <Route path="/admin" element={<AdminDashboard user={user} />} />
-              <Route path="/courses" element={<Courses user={user} />} />
-              <Route path="/courses/:id" element={<CourseDetail user={user} />} />
-              <Route path="/profile" element={<Profile user={user} />} />
-            </Route>
-          </Routes>
+              <Route path="/" element={<ProtectedRoute />}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                
+                <Route path="/dashboard" element={<StudentDashboard user={user} />} />
+                <Route path="/instructor/dashboard" element={<TeacherDashboard user={user} />} />
+                <Route path="/admin" element={<AdminDashboard user={user} />} />
+                <Route path="/courses" element={<Courses user={user} />} />
+                <Route path="/courses/:id" element={<CourseDetail user={user} />} />
+                <Route path="/profile" element={<Profile user={user} />} />
+              </Route>
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
       

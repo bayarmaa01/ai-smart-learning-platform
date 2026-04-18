@@ -51,6 +51,11 @@ export default function ProtectedRoute() {
     return <Navigate to="/instructor/dashboard" replace />;
   }
 
+  // Add error boundary for undefined user role
+  if (!user || !user.role) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
   // Prevent non-admins from accessing admin routes
   if (!['admin', 'super_admin'].includes(user.role) && currentPath.startsWith('/admin')) {
     return <Navigate to="/dashboard" replace />;
