@@ -156,7 +156,7 @@ router.get('/all', verifyToken, authorizeRoles('admin'), async (req, res) => {
 });
 
 // Teacher: Get students
-router.get('/students', verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+router.get('/students', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
   try {
     const result = await query(`
       SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.created_at,
@@ -223,7 +223,7 @@ router.get('/admin-stats', verifyToken, authorizeRoles('admin'), async (req, res
 });
 
 // Teacher: Get teacher stats
-router.get('/teacher-stats', verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+router.get('/teacher-stats', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
   try {
     const result = await query(`
       SELECT 

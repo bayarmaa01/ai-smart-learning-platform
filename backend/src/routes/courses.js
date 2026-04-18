@@ -5,6 +5,36 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// Get instructor's courses
+router.get('/instructor', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT c.*, cat.name as category_name,
+             COUNT(e.id) as enrollment_count
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN enrollments e ON c.id = e.course_id
+      WHERE c.instructor_id = $1
+      GROUP BY c.id, cat.name
+      ORDER BY c.created_at DESC
+    `, [req.user.userId]);
+
+    res.json({
+      success: true,
+      courses: result.rows
+    });
+  } catch (error) {
+    logger.error('Get instructor courses error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch instructor courses'
+      }
+    });
+  }
+});
+
 // Get all courses
 router.get('/', async (req, res) => {
   try {
@@ -125,8 +155,8 @@ router.get('/:id/lessons', verifyToken, async (req, res) => {
   }
 });
 
-// Create course (teacher/admin only)
-router.post('/', verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+// Create course (instructor/admin only)
+router.post('/', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
   try {
     const { title, description, shortDescription, level, price, durationHours, categoryId } = req.body;
     
@@ -162,8 +192,8 @@ router.post('/', verifyToken, authorizeRoles('teacher', 'admin'), async (req, re
   }
 });
 
-// Update course (teacher/admin only)
-router.put('/:id', verifyToken, authorizeRoles('teacher', 'admin'), async (req, res) => {
+// Update course (instructor/admin only)
+router.put('/:id', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, shortDescription, level, price, durationHours, status } = req.body;
