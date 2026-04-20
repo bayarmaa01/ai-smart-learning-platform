@@ -39,6 +39,9 @@ WORKDIR /app
 COPY --from=builder /root/.local /home/appuser/.local
 ENV PATH=/home/appuser/.local/bin:$PATH
 
+# Verify uvicorn is available
+RUN python -c "import uvicorn; print('uvicorn installed successfully')"
+
 # Copy source
 COPY --chown=appuser:appuser . .
 
