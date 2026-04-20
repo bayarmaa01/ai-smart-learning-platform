@@ -72,14 +72,73 @@ export default function StudentDashboard() {
   ]);
 
   useEffect(() => {
-    dispatch(fetchMyCourses());
-    api.get('/users/stats').then((res) => {
-      setStats(res.data.stats);
-    }).catch(() => null);
-    api.get('/users/activity/weekly').then((res) => {
-      if (res.data.weekly?.length) setWeeklyData(res.data.weekly);
-    }).catch(() => null);
-  }, [dispatch]);
+    const fetchData = async () => {
+      try {
+        console.log('Fetching student dashboard data...');
+        
+        // Fetch enrolled courses
+        await dispatch(fetchMyCourses());
+        
+        // Fetch user stats with fallback
+        try {
+          const statsResponse = await api.get('/users/stats');
+          console.log('User stats:', statsResponse.data);
+          setStats(statsResponse.data.stats || {
+            enrolledCourses: 0,
+            certificates: 0,
+            totalHours: 0,
+            completionRate: 0,
+            streak: 0,
+            weeklyGoalHours: 10,
+            weeklyCompletedHours: 0,
+            points: 0
+          });
+        } catch (statsError) {
+          console.warn('Stats endpoint not available, using fallback:', statsError.message);
+          // Fallback stats
+          setStats({
+            enrolledCourses: 0,
+            certificates: 0,
+            totalHours: 0,
+            completionRate: 0,
+            streak: 0,
+            weeklyGoalHours: 10,
+            weeklyCompletedHours: 0,
+            points: 0
+          });
+        }
+
+        // Fetch weekly activity with fallback
+        try {
+          const weeklyResponse = await api.get('/users/activity/weekly');
+          console.log('Weekly activity:', weeklyResponse.data);
+          if (weeklyResponse.data.weekly?.length) {
+            setWeeklyData(weeklyResponse.data.weekly);
+          }
+        } catch (weeklyError) {
+          console.warn('Weekly activity endpoint not available, using fallback:', weeklyError.message);
+          // Keep default weekly data
+        }
+      } catch (error) {
+        console.error('Dashboard data fetch error:', error);
+        // Set fallback data
+        setStats({
+          enrolledCourses: 0,
+          certificates: 0,
+          totalHours: 0,
+          completionRate: 0,
+          streak: 0,
+          weeklyGoalHours: 10,
+          weeklyCompletedHours: 0,
+          points: 0
+        });
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [dispatch, user]);
 
   const enrolledCount = stats?.enrolledCourses ?? myCourses.length;
   const certificateCount = stats?.certificates ?? 0;
@@ -90,6 +149,9 @@ export default function StudentDashboard() {
   const weeklyCompletedHours = stats?.weeklyCompletedHours ?? 0;
   const weeklyGoalPct = weeklyGoalHours > 0 ? Math.min(100, Math.round((weeklyCompletedHours / weeklyGoalHours) * 100)) : 0;
   const points = stats?.points ?? 0;
+
+  // Add loading state
+  const isLoading = !stats || !user;
 
   const statCards = [
     { icon: BookOpen, label: t('dashboard.enrolledCourses'), value: enrolledCount, color: 'bg-primary-600', trend: null },
@@ -104,6 +166,14 @@ export default function StudentDashboard() {
   }).slice(0, 4);
 
   const displayCourses = inProgressCourses.length > 0 ? inProgressCourses : myCourses.slice(0, 4);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-slide-up">

@@ -41,9 +41,23 @@ export const fetchMyCourses = createAsyncThunk(
   'courses/fetchMyCourses',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get('/courses/enrolled');
-      return response.data.courses;
+      console.log('Fetching enrolled courses...');
+      // Try the enrolled endpoint first, fallback to courses endpoint
+      let response;
+      try {
+        response = await api.get('/courses/enrolled');
+      } catch (enrolledError) {
+        console.warn('Enrolled courses endpoint not available, trying general courses:', enrolledError.message);
+        // Fallback to general courses endpoint
+        response = await api.get('/courses');
+        // Filter for enrolled courses if enrollment data is available
+        const courses = response.data.courses || [];
+        return courses.filter(course => course.isEnrolled || course.enrollment_status === 'enrolled');
+      }
+      console.log('Enrolled courses response:', response.data);
+      return response.data.courses || [];
     } catch (err) {
+      console.error('Failed to fetch enrolled courses:', err);
       return rejectWithValue(err.response?.data?.message || 'Failed to fetch enrolled courses');
     }
   }

@@ -8,6 +8,11 @@ const router = express.Router();
 // Get all courses
 router.get('/', async (req, res) => {
   try {
+    // Prevent caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     const { category, level, search } = req.query;
     
     let whereClause = 'WHERE c.status = $1';
@@ -61,6 +66,11 @@ router.get('/', async (req, res) => {
 // Get instructor's courses
 router.get('/instructor', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
   try {
+    // Prevent caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     const result = await query(`
       SELECT c.*, cat.name as category_name,
              COUNT(e.id) as enrollment_count
@@ -91,6 +101,11 @@ router.get('/instructor', verifyToken, authorizeRoles('instructor', 'admin'), as
 // Get course by ID
 router.get('/:id', async (req, res) => {
   try {
+    // Prevent caching
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    
     const { id } = req.params;
     
     const result = await query(`
@@ -123,6 +138,45 @@ router.get('/:id', async (req, res) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to fetch course'
+      }
+    });
+  }
+});
+
+// Get enrolled courses for current user
+router.get('/enrolled', verifyToken, (req, res, next) => {
+  // Prevent caching
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+}, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await query(`
+      SELECT c.*, u.first_name || ' ' || u.last_name as instructor_name,
+             e.enrolled_at, e.progress_percentage, e.completed_at,
+             cat.name as category_name
+      FROM courses c
+      LEFT JOIN users u ON c.instructor_id = u.id
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN enrollments e ON c.id = e.course_id AND e.student_id = $1
+      WHERE e.student_id = $1 AND c.status = 'published'
+      ORDER BY e.enrolled_at DESC
+    `, [userId]);
+
+    res.json({
+      success: true,
+      courses: result.rows
+    });
+  } catch (error) {
+    logger.error('Get enrolled courses error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch enrolled courses'
       }
     });
   }

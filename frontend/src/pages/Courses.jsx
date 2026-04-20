@@ -13,10 +13,13 @@ const Courses = ({ user }) => {
     const fetchCourses = async () => {
       try {
         setLoading(true);
+        console.log('Fetching courses...');
         const response = await api.get('/courses');
+        console.log('Courses response:', response.data);
         setCourses(response.data.courses || []);
       } catch (error) {
         console.error('Failed to fetch courses:', error);
+        setCourses([]);
       } finally {
         setLoading(false);
       }
@@ -99,9 +102,14 @@ const Courses = ({ user }) => {
               <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2z" />
               </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No courses found</h3>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">
+                {courses.length === 0 ? 'No courses available' : 'No courses found'}
+              </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Try adjusting your search or filters.
+                {courses.length === 0 
+                  ? 'Check back later for new courses.'
+                  : 'Try adjusting your search or filters.'
+                }
               </p>
             </div>
           ) : (

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import api from '../../services/api';
 import {
   BookOpen,
   Users,
@@ -15,54 +16,27 @@ import {
 
 export default function InstructorCourses() {
   const { t } = useTranslation();
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const courses = [
-    {
-      id: 1,
-      title: 'Advanced React Development',
-      description: 'Master React with hooks, context, and advanced patterns',
-      thumbnail: '/api/placeholder/300/200',
-      students: 342,
-      duration: '12 hours',
-      price: '$89.99',
-      rating: 4.8,
-      status: 'published',
-      progress: 78,
-      revenue: '$8,420',
-      category: 'Development',
-      createdAt: '2024-01-15',
-    },
-    {
-      id: 2,
-      title: 'Node.js Masterclass',
-      description: 'Build scalable backend applications with Node.js',
-      thumbnail: '/api/placeholder/300/200',
-      students: 256,
-      duration: '8 hours',
-      price: '$79.99',
-      rating: 4.9,
-      status: 'published',
-      progress: 92,
-      revenue: '$6,340',
-      category: 'Development',
-      createdAt: '2024-01-10',
-    },
-    {
-      id: 3,
-      title: 'Python for Beginners',
-      description: 'Start your programming journey with Python',
-      thumbnail: '/api/placeholder/300/200',
-      students: 189,
-      duration: '6 hours',
-      price: '$59.99',
-      rating: 4.7,
-      status: 'draft',
-      progress: 45,
-      revenue: '$0',
-      category: 'Programming',
-      createdAt: '2024-01-20',
-    },
-  ];
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        console.log('Fetching instructor courses...');
+        const response = await api.get('/courses/instructor');
+        console.log('Instructor courses response:', response.data);
+        setCourses(response.data.courses || []);
+      } catch (error) {
+        console.error('Failed to fetch instructor courses:', error);
+        setCourses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -76,6 +50,19 @@ export default function InstructorCourses() {
         return 'bg-slate-500/20 text-slate-300 border border-slate-500/30';
     }
   };
+
+  const filteredCourses = courses.filter(course => 
+    course.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    course.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
@@ -114,7 +101,30 @@ export default function InstructorCourses() {
 
       {/* Courses Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {courses.map((course) => (
+        {filteredCourses.length === 0 ? (
+          <div className="col-span-full text-center py-12">
+            <BookOpen className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">
+              {courses.length === 0 
+                ? t('instructor.noCourses', { defaultValue: 'No courses yet' })
+                : t('instructor.noMatchingCourses', { defaultValue: 'No matching courses' })
+              }
+            </h3>
+            <p className="text-slate-400 mb-4">
+              {courses.length === 0 
+                ? t('instructor.createFirstCourse', { defaultValue: 'Create your first course to get started' })
+                : t('instructor.tryDifferentSearch', { defaultValue: 'Try adjusting your search terms' })
+              }
+            </p>
+            {courses.length === 0 && (
+              <Link to="/instructor/create-course" className="btn-primary">
+                <Plus className="w-4 h-4 mr-2" />
+                {t('instructor.createCourse', { defaultValue: 'Create Course' })}
+              </Link>
+            )}
+          </div>
+        ) : (
+          filteredCourses.map((course) => (
           <div key={course.id} className="card group">
             <div className="aspect-video bg-slate-800 rounded-lg mb-4 overflow-hidden">
               <img
@@ -177,7 +187,9 @@ export default function InstructorCourses() {
             )}
 
             <div className="flex items-center justify-between pt-3 border-t border-slate-700/50">
-              <span className="text-green-400 font-medium">{course.revenue}</span>
+              <span className="text-green-400 font-medium">
+                ${course.enrollment_count ? (course.enrollment_count * (course.price || 0)).toLocaleString() : '0'}
+              </span>
               <Link
                 to={`/instructor/courses/${course.id}`}
                 className="text-primary-400 hover:text-primary-300 text-sm font-medium"
@@ -186,7 +198,8 @@ export default function InstructorCourses() {
               </Link>
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useDispatch } from 'react-redux';
+import { setUser, fetchCurrentUser } from '../store/slices/authSlice';
 import { authService } from '../services/authService';
 import api from '../services/api';
 
@@ -13,6 +15,7 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
+  const dispatch = useDispatch();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -25,15 +28,20 @@ export const AuthProvider = ({ children }) => {
           // Validate token with backend
           try {
             const response = await api.get('/auth/me');
+            console.log('Auth me response:', response.data);
             if (response.data.success) {
-              setUser(response.data.data.user);
+              const userData = response.data.data.user;
+              setUser(userData);
               setIsAuthenticated(true);
+              // Also update Redux store
+              dispatch(setUser(userData));
             } else {
               // Invalid response, clear tokens
               localStorage.removeItem('accessToken');
               localStorage.removeItem('refreshToken');
             }
           } catch (error) {
+            console.log('Auth me error, clearing tokens:', error.message);
             // Token invalid or expired, clear it
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
@@ -65,6 +73,8 @@ export const AuthProvider = ({ children }) => {
         // Update state
         setUser(userData);
         setIsAuthenticated(true);
+        // Also update Redux store
+        dispatch(setUser(userData));
         
         return { success: true, user: userData };
       } else {
@@ -92,6 +102,8 @@ export const AuthProvider = ({ children }) => {
         // Update state
         setUser(newUser);
         setIsAuthenticated(true);
+        // Also update Redux store
+        dispatch(setUser(newUser));
         
         return { success: true, user: newUser };
       } else {
@@ -110,6 +122,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('refreshToken');
     setUser(null);
     setIsAuthenticated(false);
+    // Also update Redux store
+    dispatch(setUser(null));
   };
 
   const value = {

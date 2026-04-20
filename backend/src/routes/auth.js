@@ -24,6 +24,12 @@ router.post('/login', [
 router.post('/refresh', refreshToken);
 
 // Get current user profile
-router.get('/me', verifyToken, getMe);
+router.get('/me', verifyToken, (req, res, next) => {
+  // Prevent caching
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+}, getMe);
 
 module.exports = router;
