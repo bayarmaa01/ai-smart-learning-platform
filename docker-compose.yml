@@ -5,7 +5,6 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  ollama_data:
   prometheus_data:
   grafana_data:
 
@@ -47,25 +46,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Ollama AI Service (Optional - may fail due to network issues)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: eduai-ollama
-    ports:
-      - "11435:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - eduai-network
-    environment:
-      - OLLAMA_HOST=0.0.0.0
-      - OLLAMA_ORIGINS=*
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 10 && ollama pull gemma:2b || true"]
-    pull_policy: if_missing
-    restart: unless-stopped
-    profiles:
-      - ai  # Only start with --profile ai
-
+  
   # Backend API Service
   backend:
     build:
