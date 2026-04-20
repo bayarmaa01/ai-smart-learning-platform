@@ -30,8 +30,8 @@ FROM nginx:1.25-alpine AS production
 RUN apk upgrade --no-cache && \
     apk add --no-cache wget
 
-# Copy complete nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx server configuration
+COPY ../nginx/default.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -45,8 +45,8 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
     chown -R nginx-user:nginx-user /var/log/nginx && \
     chown -R nginx-user:nginx-user /var/run
 
-# Copy complete nginx configuration
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy nginx server configuration
+COPY ../nginx/default.conf /etc/nginx/conf.d/default.conf
 RUN chown -R nginx-user:nginx-user /etc/nginx
 
 EXPOSE 80
