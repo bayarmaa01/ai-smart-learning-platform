@@ -1,6 +1,9 @@
 networks:
   eduai-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 volumes:
   postgres_data:
@@ -30,6 +33,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    restart: unless-stopped
 
   # Redis Cache
   redis:
@@ -46,8 +51,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    sysctls:
+      - net.core.somaxconn=65535
 
-  # Ollama AI Service
+  # Ollama AI Service (Optional)
   ollama:
     image: ollama/ollama:latest
     container_name: eduai-ollama
@@ -141,7 +150,6 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  
   # Frontend React App
   frontend:
     build:
@@ -159,25 +167,12 @@ services:
         condition: service_healthy
     networks:
       - eduai-network
-
-  # Prometheus Monitoring
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: eduai-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    networks:
-      - eduai-network
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # Nginx Reverse Proxy
@@ -205,7 +200,27 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # Grafana Dashboard
+  # Prometheus Monitoring (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: eduai-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - eduai-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+
+  # Grafana Dashboard (Optional)
   grafana:
     image: grafana/grafana:latest
     container_name: eduai-grafana
@@ -216,13 +231,11 @@ services:
       GF_USERS_ALLOW_SIGN_UP: false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     networks:
       - eduai-network
     depends_on:
       prometheus:
         condition: service_started
     restart: unless-stopped
-
-  
