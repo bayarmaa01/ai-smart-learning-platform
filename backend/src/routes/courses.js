@@ -1,39 +1,9 @@
 const express = require('express');
 const { verifyToken, authorizeRoles } = require('../middleware/auth');
 const { query } = require('../config/database');
-const logger = require('../utils/logger');
+const { logger } = require('../utils/logger');
 
 const router = express.Router();
-
-// Get instructor's courses
-router.get('/instructor', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
-  try {
-    const result = await query(`
-      SELECT c.*, cat.name as category_name,
-             COUNT(e.id) as enrollment_count
-      FROM courses c
-      LEFT JOIN categories cat ON c.category_id = cat.id
-      LEFT JOIN enrollments e ON c.id = e.course_id
-      WHERE c.instructor_id = $1
-      GROUP BY c.id, cat.name
-      ORDER BY c.created_at DESC
-    `, [req.user.userId]);
-
-    res.json({
-      success: true,
-      courses: result.rows
-    });
-  } catch (error) {
-    logger.error('Get instructor courses error:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch instructor courses'
-      }
-    });
-  }
-});
 
 // Get all courses
 router.get('/', async (req, res) => {
@@ -83,6 +53,36 @@ router.get('/', async (req, res) => {
       error: {
         code: 'INTERNAL_ERROR',
         message: 'Failed to fetch courses'
+      }
+    });
+  }
+});
+
+// Get instructor's courses
+router.get('/instructor', verifyToken, authorizeRoles('instructor', 'admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT c.*, cat.name as category_name,
+             COUNT(e.id) as enrollment_count
+      FROM courses c
+      LEFT JOIN categories cat ON c.category_id = cat.id
+      LEFT JOIN enrollments e ON c.id = e.course_id
+      WHERE c.instructor_id = $1
+      GROUP BY c.id, cat.name
+      ORDER BY c.created_at DESC
+    `, [req.user.userId]);
+
+    res.json({
+      success: true,
+      courses: result.rows
+    });
+  } catch (error) {
+    logger.error('Get instructor courses error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch instructor courses'
       }
     });
   }
