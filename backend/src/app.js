@@ -35,7 +35,7 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ["http://localhost:3000"],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || ["http://localhost:3000", "http://localhost:3200"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires'],
     credentials: true
@@ -47,7 +47,7 @@ app.use(helmet());
 app.use(compression());
 app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ["http://localhost:3000"],
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ["http://localhost:3000", "http://localhost:3200"],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
