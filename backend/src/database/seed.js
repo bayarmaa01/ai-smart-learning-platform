@@ -40,7 +40,7 @@ const seedData = async () => {
         password_hash: teacherPassword,
         first_name: 'Teacher',
         last_name: 'User',
-        role: 'teacher',
+        role: 'instructor',
         is_email_verified: true,
         is_active: true
       },
@@ -99,7 +99,7 @@ const seedData = async () => {
     }
 
     // Get inserted users and categories for foreign key references
-    const instructorResult = await query('SELECT id FROM users WHERE role = $1', ['teacher']);
+    const instructorResult = await query('SELECT id FROM users WHERE role = $1', ['instructor']);
     const instructorId = instructorResult.rows[0].id;
 
     const categoryResult = await query('SELECT id FROM categories WHERE slug = $1', ['programming']);
