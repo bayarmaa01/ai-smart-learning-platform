@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Union
+import json
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -54,6 +56,18 @@ class Settings(BaseSettings):
     # Language Detection
     DEFAULT_LANGUAGE: str = "en"
     SUPPORTED_LANGUAGES: List[str] = ["en", "mn"]
+
+    @field_validator('ALLOWED_ORIGINS', 'ALLOWED_HOSTS', 'SUPPORTED_LANGUAGES', mode='before')
+    @classmethod
+    def parse_list_field(cls, v):
+        if isinstance(v, str):
+            # Try to parse as JSON first
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                # If not JSON, split by comma
+                return [item.strip() for item in v.split(',') if item.strip()]
+        return v
 
     class Config:
         env_file = ".env"
