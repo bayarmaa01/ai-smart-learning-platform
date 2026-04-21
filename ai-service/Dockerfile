@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir --upgrade pip wheel
 COPY requirements.txt .
 
 # Install Python dependencies with wheel cache
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Production
 FROM python:3.11-slim AS production
@@ -39,8 +39,8 @@ WORKDIR /app
 COPY --from=builder /root/.local /home/appuser/.local
 ENV PATH=/home/appuser/.local/bin:$PATH
 
-# Install uvicorn system-wide to avoid PATH issues and ensure all dependencies
-RUN pip install --no-cache-dir uvicorn[standard] fastapi prometheus-fastapi-instrumentator redis
+# Install uvicorn system-wide to avoid PATH issues
+RUN pip install --no-cache-dir uvicorn[standard]
 
 # Copy source
 COPY --chown=appuser:appuser . .
