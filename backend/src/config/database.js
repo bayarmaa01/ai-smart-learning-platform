@@ -9,7 +9,7 @@ const connectDB = async () => {
   try {
     // PostgreSQL connection
     pool = new Pool({
-      host: process.env.DB_HOST || 'eduai-postgres',
+      host: process.env.DB_HOST || 'postgres',
       port: process.env.DB_PORT || 5432,
       database: process.env.DB_NAME || 'eduai',
       user: process.env.DB_USER || 'postgres',
@@ -25,7 +25,7 @@ const connectDB = async () => {
 
     // Redis connection
     redisClient = redis.createClient({
-      url: process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || 'eduai-redis'}:${process.env.REDIS_PORT || 6379}`,
+      url: process.env.REDIS_URL || `redis://${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || 6379}`,
       socket: {
         reconnectStrategy: (retries) => {
           if (retries > 10) {

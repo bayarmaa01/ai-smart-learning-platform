@@ -15,14 +15,14 @@ class Settings(BaseSettings):
 
     # Security
     ALLOWED_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:5000",
+        "http://localhost",
+        "http://localhost:80",
     ]
-    ALLOWED_HOSTS: List[str] = ["*"]
+    ALLOWED_HOSTS: List[str] = ["localhost", "127.0.0.1"]
     API_KEY: str = ""
 
     # Redis
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://redis:6379"
     REDIS_TTL: int = 3600
 
     # Database
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     ANTHROPIC_MODEL: str = "claude-3-sonnet-20240229"
 
     # Local LLM (Ollama) - FREE
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3"
 
     # Hugging Face Inference API - FREE
