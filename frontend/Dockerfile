@@ -30,7 +30,8 @@ FROM nginx:1.25-alpine AS production
 RUN apk upgrade --no-cache && \
     apk add --no-cache wget
 
-# Nginx configuration will be mounted via docker-compose volume
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/nginx.conf
 
 # Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -44,7 +45,7 @@ RUN mkdir -p /var/cache/nginx /var/log/nginx /var/run && \
     chown -R nginx-user:nginx-user /var/log/nginx && \
     chown -R nginx-user:nginx-user /var/run
 
-# Nginx configuration will be mounted via docker-compose volume
+# Set proper permissions for nginx config
 RUN chown -R nginx-user:nginx-user /etc/nginx
 
 EXPOSE 80
