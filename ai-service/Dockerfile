@@ -39,8 +39,8 @@ WORKDIR /app
 COPY --from=builder /root/.local /home/appuser/.local
 ENV PATH=/home/appuser/.local/bin:$PATH
 
-# Install uvicorn system-wide to avoid PATH issues
-RUN pip install --no-cache-dir uvicorn[standard]
+# Install uvicorn system-wide to avoid PATH issues and ensure all dependencies
+RUN pip install --no-cache-dir uvicorn[standard] fastapi
 
 # Copy source
 COPY --chown=appuser:appuser . .
